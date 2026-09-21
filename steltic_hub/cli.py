@@ -58,7 +58,7 @@ def _free_port(preferred: int) -> int:
 
 
 def _hub_info(url: str) -> dict | None:
-    """The /healthz answer of a Steltic Hub at this URL (None: nothing, or not a hub, there)."""
+    """The /healthz answer of a Steltic hub at this URL (None: nothing, or not a hub, there)."""
     try:
         import urllib.request, json
         with urllib.request.urlopen(url + "/healthz", timeout=2) as r:
@@ -69,7 +69,7 @@ def _hub_info(url: str) -> dict | None:
 
 
 def _hub_at(url: str) -> bool:
-    """Is a Steltic Hub already answering at this URL?"""
+    """Is a Steltic hub already answering at this URL?"""
     return _hub_info(url) is not None
 
 
@@ -96,9 +96,10 @@ def _wait_port_free(port: int, timeout: float) -> bool:
 
 def main():
     log_path = _ensure_streams()
+    from . import config
 
-    ap = argparse.ArgumentParser(prog="steltic-hub", description="Steltic Hub -- local module shell")
-    ap.add_argument("--port", type=int, default=int(os.environ.get("STELTIC_HUB_PORT", "8300")))
+    ap = argparse.ArgumentParser(prog="steltic-hub", description="Steltic Hub India -- local module shell")
+    ap.add_argument("--port", type=int, default=int(os.environ.get("STELTIC_HUB_PORT", str(config.DEFAULT_PORT))))
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--no-browser", action="store_true")
     ap.add_argument("--bootstrap", action="store_true",
@@ -248,7 +249,7 @@ def doctor():
 
     def line(k, v): print(f"  {k:<22} {v}")
 
-    print("\n== Steltic Hub doctor ==\n")
+    print("\n== Steltic Hub India doctor ==\n")
     line("hub version", __import__("steltic_hub").__version__)
     line("hub python", sys.version.split()[0])
     line("platform", sys.platform)
@@ -262,7 +263,7 @@ def doctor():
                                    "evaluation": "evaluation -- nothing blocked yet, may switch itself ON at a reboot",
                                    "off": "off"}.get(st, st or "not present (Windows 10, or not a clean-install Win 11)"))
 
-    port = int(os.environ.get("STELTIC_HUB_PORT", "8300"))
+    port = int(os.environ.get("STELTIC_HUB_PORT", str(config.DEFAULT_PORT)))
     if _port_free(port):
         line(f"port {port}", "free")
     else:

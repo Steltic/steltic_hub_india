@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "steltic-hub"
-version = "0.2.2"
-description = "Desktop hub for the Steltic modules: one window, per-module Python environments, input tabs on top of the viewer bundle"
+name = "steltic-hub-india"
+version = "0.1.0"
+description = "Steltic Hub India: one window over the India (IS 800 / IS 801 / IS 875 / IS 1893) Steltic modules, per-module Python environments, input tabs on top of the viewer bundle"
 readme = "README.md"
 license = "MIT"
 # The hub itself has no openseespy bound -- it never imports module code. Each module gets its
@@ -20,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 steltic-hub = "steltic_hub.cli:main"
+steltic-hub-india = "steltic_hub.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["steltic_hub"]

@@ -1,4 +1,4 @@
-/* Steltic Hub shell.
+/* Steltic Hub India shell.
  *
  * This file renders whatever the manifests describe. It contains no module names, no field
  * lists and no command strings -- adding a module means adding a manifest, not editing this.
@@ -1152,7 +1152,7 @@ async function openConnection() {
 
   openModal('LLM connection', [
     el('p', { class: 'blurb' },
-      'Typed once and saved on this PC, so it is there the next time you open Steltic. Every module that ' +
+      'Typed once and saved on this PC, so it is there the next time you open Steltic Hub India. Every module that ' +
       'needs it gets it when its server starts; it goes nowhere else than to the provider you name here.'),
     mk('base_url', 'API base URL', d.base_url, 'text', 'https://api.your-provider.com/v1',
        'Any OpenAI-compatible endpoint — e.g. OpenRouter https://openrouter.ai/api/v1, OpenAI https://api.openai.com/v1, Anthropic https://api.anthropic.com/v1, or a local vLLM.'),

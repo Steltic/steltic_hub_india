@@ -1,4 +1,4 @@
-"""Steltic Hub -- the FastAPI app behind the desktop window.
+"""Steltic Hub India -- the FastAPI app behind the desktop window.
 
 The hub is deliberately the only long-lived process that knows about *all* modules, and it
 knows about them only through manifests. The desktop shell (Tauri/Electron/none) just opens
@@ -110,7 +110,7 @@ def _spawn_replacement() -> int:
     """Start a fresh hub that waits for our port to free up, then takes it over (cli.py --replace).
     Detached from us so it survives our exit; the same interpreter (pythonw under the launcher, so no
     console flashes), the same environment, the same port."""
-    argv = [sys.executable, "-m", "steltic_hub.cli", "--port", str(getattr(app.state, "port", 8300)),
+    argv = [sys.executable, "-m", "steltic_hub.cli", "--port", str(getattr(app.state, "port", config.DEFAULT_PORT)),
             "--no-browser", "--replace", str(os.getpid())]
     kw: dict = {"close_fds": True, "cwd": str(config.DATA)}
     if sys.platform == "win32":
@@ -142,7 +142,7 @@ async def _lifespan(_app):
         pass
 
 
-app = FastAPI(title="Steltic Hub", lifespan=_lifespan)
+app = FastAPI(title=config.APP_NAME, lifespan=_lifespan)
 
 _SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 

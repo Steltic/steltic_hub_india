@@ -1,6 +1,6 @@
 # Tauri shell (optional)
 
-The hub runs perfectly well without any native shell — `Steltic.bat` opens a chromeless Edge
+The hub runs perfectly well without any native shell — `Steltic.bat` (Steltic Hub India) opens a chromeless Edge
 window at the same URL, using the same WebView2 engine Tauri would. Build this only when you
 want a real installer, an app entry in Add/Remove Programs, and a signed `.exe`.
 

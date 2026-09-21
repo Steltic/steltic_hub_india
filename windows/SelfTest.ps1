@@ -1,9 +1,9 @@
 <#
-  Steltic Hub — Windows self-test.
+  Steltic Hub India — Windows self-test.
 
   Runs the whole first-run path end to end and writes selftest-report.txt next to this repo.
-  Everything it creates lives in .\selftest-data, so your real %LOCALAPPDATA%\Steltic (and any
-  existing Steltic install) is untouched. Delete that folder to reset.
+  Everything it creates lives in .\selftest-data, so your real %LOCALAPPDATA%\steltic_hub_india (and
+  any existing Steltic install, US or India) is untouched. Delete that folder to reset.
 #>
 param([switch]$KeepData, [int]$Port = 8399)
 
@@ -48,7 +48,7 @@ function Run($exe, $arglist, $label) {
   return $o
 }
 
-Log "Steltic Hub self-test"
+Log "Steltic Hub India self-test"
 Log "  when      : $(Get-Date -Format u)"
 Log "  repo      : $Repo"
 Log "  data      : $Data"
@@ -105,7 +105,7 @@ Step "4. steltic-hub doctor"
 $env:STELTIC_HUB_PORT = $Port
 $o = & $HubPy -m steltic_hub.cli doctor 2>&1 | Out-String
 foreach ($l in ($o -split "`r?`n")) { Log "      $l" }
-Check "doctor ran" ($o -match 'Steltic Hub doctor')
+Check "doctor ran" ($o -match 'Steltic Hub India doctor')
 Check "doctor found uv" ($o -notmatch 'uv\s+NOT FOUND')
 Check "doctor found git" ($o -notmatch 'git\s+NOT FOUND')
 
@@ -271,7 +271,7 @@ if ($ready) {
   $dv = $state.modules | Where-Object { $_.id -eq 'steltic_variations' }
   Check "Design variations is listed as bundled" ([bool]$dv.bundled) "$($dv.name)"
   $pa = $state.modules | Where-Object { $_.id -eq 'steltic_probabilistic' }
-  Check "Probabilistic analysis is listed as bundled" ([bool]$pa.bundled) "$($pa.name) (needs HR Steel + Nonlinear to run)"
+  Check "Probabilistic analysis is listed as bundled" ([bool]$pa.bundled) "$($pa.name) (needs HR Steel (IS 800) + Nonlinear to run)"
   $exm = $state.modules | Where-Object { $_.id -eq 'smoke_module' }
   Check "smoke_module linked" ([bool]$exm.status.linked) $exm.status.linked
   Check "smoke_module env ready" ([bool]$exm.status.env_ready)
@@ -342,7 +342,7 @@ Log "  failed: $script:Fail"
 Log ""
 if ($ready) {
   Log "  The hub is still running on $url (pid $hubPid)."
-  Log "  Close the Steltic window and run:  Stop-Process -Id $hubPid"
+  Log "  Close the Steltic Hub India window and run:  Stop-Process -Id $hubPid"
   Log "  (or: Invoke-RestMethod $url/api/hub/shutdown -Method Post -- graceful, module servers included)"
 } else {
   Log "  The hub did not start -- see the diagnosis in step 6 above."

@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Steltic",
+  "productName": "Steltic Hub India",
   "version": "0.1.0",
-  "identifier": "com.stelticai.hub",
+  "identifier": "com.stelticai.hub.india",
   "build": { "frontendDist": "../dist" },
   "app": {
     "windows": [{
-      "title": "Steltic",
+      "title": "Steltic Hub India",
       "width": 1440, "height": 940, "minWidth": 1040, "minHeight": 680,
       "resizable": true, "visible": false, "center": true
     }],

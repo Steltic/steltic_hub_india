@@ -1,4 +1,4 @@
-// Steltic desktop shell.
+// Steltic Hub India desktop shell.
 //
 // This is the entire native layer: start the Python hub, wait for it to answer, point the
 // webview at it. All product logic lives in the hub, which is why swapping this shell for
@@ -12,7 +12,7 @@ struct Hub(std::sync::Mutex<Option<Child>>);
 
 fn data_root() -> PathBuf {
     let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
-    base.join("Steltic")
+    base.join("steltic_hub_india")   // NOT "Steltic": that is the US hub's folder
 }
 
 /// The hub interpreter created by the bootstrap step (see windows/Steltic.ps1 / bootstrap.rs).
@@ -65,10 +65,10 @@ fn main() {
         .env("STELTIC_HUB_UV", &uv)
         .stdout(Stdio::null()).stderr(Stdio::null())
         .spawn()
-        .expect("could not start the Steltic hub");
+        .expect("could not start the Steltic Hub India server");
 
     if !wait_healthy(port, Duration::from_secs(90)) {
-        eprintln!("the Steltic hub did not start; see %LOCALAPPDATA%\\Steltic\\logs");
+        eprintln!("the Steltic Hub India server did not start; see %LOCALAPPDATA%\\steltic_hub_india\\logs");
     }
 
     tauri::Builder::default()
@@ -100,5 +100,5 @@ fn main() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running Steltic");
+        .expect("error while running Steltic Hub India");
 }

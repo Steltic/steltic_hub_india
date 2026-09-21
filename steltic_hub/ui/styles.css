@@ -1,11 +1,15 @@
-/* Steltic Hub — the viewer bundle's palette, grown into a shell.
-   Colours, type and chip language are lifted from steltic_viewer_bundle.html so the app and the
-   viewers it frames read as one product. */
+/* Steltic Hub India — the viewer bundle's palette, grown into a shell.
+   Type and chip language are lifted from steltic_viewer_bundle.html so the app and the viewers it
+   frames read as one product. The accents are the India tricolour: saffron #ff9933 (the hub accent
+   and HR Steel), India green #138808 (CFS) and navy #000080 (Nonlinear, the IS corpus) -- the green
+   and navy are lifted (--green-ui / --navy-ui) where they sit on the dark shell, the pure values
+   are kept as tokens for light surfaces. The layout is the US hub's, unchanged. */
 :root{
   --bg:#12100d; --bar:#0e0c0a; --panel:#1a1712; --panel2:#221e18;
   --line:#3a342c; --line2:#52483c;
   --ink:#f0ebe4; --dim:#a89f92; --dimmer:#6e665c;
-  --accent:#ff8a3d; --ok:#4dcb9a; --warn:#e8b04a; --bad:#e8745e;
+  --saffron:#ff9933; --green:#138808; --navy:#000080; --green-ui:#3cb043; --navy-ui:#7b93e8;
+  --accent:var(--saffron); --ok:#4dcb9a; --warn:#e8b04a; --bad:#e8745e;
   --rail:210px;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
@@ -13,7 +17,7 @@
 html,body{height:100%}
 body{background:var(--bg);color:var(--ink);font:14px/1.5 'Segoe UI',system-ui,-apple-system,sans-serif;overflow:hidden}
 button,input,select,textarea{font:inherit;color:inherit}
-a{color:#ffb070}
+a{color:#ffb86b}
 
 /* ---------- chrome ---------- */
 #bar{position:fixed;top:0;left:0;right:0;height:44px;display:flex;align-items:center;gap:10px;
@@ -30,8 +34,8 @@ a{color:#ffb070}
 .mod{display:flex;align-items:center;gap:9px;padding:9px 14px;cursor:pointer;border-left:2px solid transparent;
   transition:background .12s}
 .mod:hover{background:#201c16}
-.mod.on{background:#27221c;border-left-color:var(--c,#ff8a3d)}
-.mod .dot{width:8px;height:8px;border-radius:50%;background:var(--c,#ff8a3d);flex:none;opacity:.35}
+.mod.on{background:#27221c;border-left-color:var(--c,var(--saffron))}
+.mod .dot{width:8px;height:8px;border-radius:50%;background:var(--c,var(--saffron));flex:none;opacity:.35}
 .mod.ready .dot{opacity:1}
 .mod.err .dot{background:var(--bad);opacity:1}
 .mod .t{flex:1;min-width:0}

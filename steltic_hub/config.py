@@ -1,4 +1,4 @@
-"""Paths and settings for the Steltic Hub.
+"""Paths and settings for Steltic Hub India.
 
 The hub owns NOTHING module-specific. Everything it knows about a module comes from that
 module's manifest (steltic_module.json), so adding a module is publishing a repo, not
@@ -8,6 +8,12 @@ from __future__ import annotations
 import os, pathlib, sys
 
 PKG = pathlib.Path(__file__).resolve().parent
+
+# Identity. The US hub is "Steltic Hub" on port 8300 with its data under `Steltic`; this one keeps
+# its own port, data folder and module-server port window so both can run on the same PC.
+APP_NAME = "Steltic Hub India"
+DATA_DIR_NAME = "steltic_hub_india"
+DEFAULT_PORT = 8301
 UI_DIR = PKG / "ui"
 CATALOG_DIR = PKG / "catalog"
 
@@ -24,8 +30,10 @@ def _default_data_dir() -> pathlib.Path:
         root = pathlib.Path(os.environ.get("XDG_DATA_HOME") or (pathlib.Path.home() / ".local" / "share"))
     # The same folder the Windows launcher and the Tauri shell use (they set STELTIC_HUB_DATA to
     # it explicitly). One root for every entry point, so a hub started from a terminal sees the
-    # modules the launcher installed instead of quietly provisioning a second copy.
-    return root / "Steltic"
+    # modules the launcher installed instead of quietly provisioning a second copy. It is NOT the
+    # US hub's folder (`Steltic`): the two hubs coexist on one PC with separate data, ports and
+    # module environments.
+    return root / DATA_DIR_NAME
 
 
 DATA = _default_data_dir()
@@ -43,7 +51,7 @@ for _d in (DATA, MODULES_DIR, ENVS_DIR, JOBS_DIR, LOGS_DIR):
 # Port window for module servers the hub supervises. Each module keeps the port it was first
 # given (PORTS_FILE remembers it), so one origin never serves two modules' pages -- see
 # ServerSupervisor._alloc_port for why that matters.
-PORT_BASE = int(os.environ.get("STELTIC_HUB_PORT_BASE", "8410"))
+PORT_BASE = int(os.environ.get("STELTIC_HUB_PORT_BASE", "8460"))   # the US hub uses 8410-8449
 PORT_SPAN = 40
 PORTS_FILE = DATA / "ports.json"
 
@@ -70,7 +78,7 @@ def hub_url() -> str:
             return u
     except OSError:
         pass
-    return f"http://127.0.0.1:{os.environ.get('STELTIC_HUB_PORT', '8300')}"
+    return f"http://127.0.0.1:{os.environ.get('STELTIC_HUB_PORT', str(DEFAULT_PORT))}"
 
 # Seconds of silence after which a streaming run emits an SSE comment so the connection is
 # provably alive (the module servers do the same every 20 s).

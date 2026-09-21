@@ -1,10 +1,13 @@
 <#
-  Steltic — first-run bootstrap and launcher (Windows).
+  Steltic Hub India — first-run bootstrap and launcher (Windows).
+
+  Everything lives under %LOCALAPPDATA%\steltic_hub_india on port 8301, so this hub coexists with
+  the US Steltic Hub (%LOCALAPPDATA%\Steltic, port 8300) on the same PC.
 
   Everything heavy is fetched on first run, so the thing you ship is small:
-    1. uv          (~15 MB, private to Steltic — the machine's PATH is not touched)
+    1. uv          (~15 MB, private to Steltic Hub India — the machine's PATH is not touched)
     2. CPython     (uv downloads it; the hub itself is version-agnostic)
-    3. steltic-hub (a few hundred KB)
+    3. steltic-hub-india (a few hundred KB)
     4. modules     (installed from the app's Modules tab, each into its own environment)
 
   Subsequent launches skip straight to step 4's result and open the window.
@@ -19,13 +22,13 @@ param(
   [switch]$NoWindow,       # start the server only; do not open a window
   [switch]$BootstrapOnly,  # fetch uv + Python + the hub, then exit without starting anything (Tauri shell)
   [switch]$Console,        # keep the console visible (for diagnosing a failed start)
-  [int]$Port = 8300
+  [int]$Port = 8301
 )
 
 $ErrorActionPreference = 'Stop'
 # ONE data root for the launcher and the hub. Without this the launcher's private uv lands in
 # a different folder from the one the hub searches, and the hub quietly downloads its own copy.
-$Root    = Join-Path $env:LOCALAPPDATA 'Steltic'
+$Root    = Join-Path $env:LOCALAPPDATA 'steltic_hub_india'   # NOT 'Steltic' (the US hub)
 $env:STELTIC_HUB_DATA = $Root
 $HubEnv  = Join-Path $Root 'hubenv'
 $BinDir  = Join-Path $Root 'bin'
@@ -47,7 +50,7 @@ function Fail($msg) {
   # nobody can see it. Show a message box instead, and open the log so the reason is one click away.
   try {
     Add-Type -AssemblyName PresentationFramework
-    [System.Windows.MessageBox]::Show("$msg`n`nThe full log is in:`n$LogFile", 'Steltic could not start',
+    [System.Windows.MessageBox]::Show("$msg`n`nThe full log is in:`n$LogFile", 'Steltic Hub India could not start',
       'OK', 'Error') | Out-Null
   } catch { if ($Console) { Read-Host "`nPress Enter to close" } }
   try { Start-Process notepad.exe $LogFile } catch { }
@@ -76,9 +79,9 @@ if ($Reinstall -and (Test-Path $HubEnv)) {
 }
 
 if (-not (Test-Path $HubPy)) {
-  Say 'Creating the Steltic environment (downloads Python if this machine has none)…' 'Cyan'
+  Say 'Creating the Steltic Hub India environment (downloads Python if this machine has none)…' 'Cyan'
   & $UvExe venv --python 3.12 $HubEnv
-  if ($LASTEXITCODE -ne 0) { Fail 'Could not create the Steltic environment.' }
+  if ($LASTEXITCODE -ne 0) { Fail 'Could not create the Steltic Hub India environment.' }
 }
 
 $local = Join-Path $PSScriptRoot '..'
@@ -95,13 +98,13 @@ if (-not $needInstall -and (Test-Path $PyProj)) {
   }
 }
 if ($needInstall) {
-  Say 'Installing the Steltic hub…' 'Cyan'
+  Say 'Installing the Steltic Hub India server…' 'Cyan'
   if (Test-Path $PyProj) {
     & $UvExe pip install --python $HubPy -e $local          # running from a checkout
   } else {
     & $UvExe pip install --python $HubPy steltic-hub        # running from a release
   }
-  if ($LASTEXITCODE -ne 0) { Fail 'Could not install the Steltic hub.' }
+  if ($LASTEXITCODE -ne 0) { Fail 'Could not install the Steltic Hub India server.' }
   Set-Content -Path $Stamp -Value (Get-Date -Format s)
   Say 'Hub installed.' 'Green'
 }
@@ -148,7 +151,7 @@ function Stop-Hub($u, $info) {
   }
   $deadline = (Get-Date).AddSeconds(45)
   while ((Get-Date) -lt $deadline -and (Hub-Alive $u)) { Start-Sleep -Milliseconds 300 }
-  if (Hub-Alive $u) { Fail "The hub on $u did not stop. Close it (Task Manager: pythonw.exe) and run Steltic again." }
+  if (Hub-Alive $u) { Fail "The hub on $u did not stop. Close it (Task Manager: pythonw.exe) and run Steltic Hub India again." }
   Start-Sleep -Milliseconds 800     # let the port close
 }
 
@@ -162,17 +165,17 @@ foreach ($candidate in @($url, $(if (Test-Path $UrlFile) { (Get-Content $UrlFile
   $old = ($null -eq $info.stale) -or [bool]$info.stale      # a hub without the field predates the check: treat as stale
   if ($Restart -or $old) {
     $why = if ($Restart) { 'restart requested' } elseif ($null -eq $info.stale) { 'an older hub without a freshness check' } else { 'its source files changed since it started' }
-    Say "Steltic is running on $candidate (pid $($info.pid)) -- $why; restarting it." 'Cyan'
+    Say "Steltic Hub India is running on $candidate (pid $($info.pid)) -- $why; restarting it." 'Cyan'
     Stop-Hub $candidate $info
     break
   }
-  Say "Steltic is already running on $candidate." 'Green'
+  Say "Steltic Hub India is already running on $candidate." 'Green'
   if (-not $NoWindow) { Open-Window $candidate }
   exit 0
 }
 Remove-Item $UrlFile -ErrorAction SilentlyContinue
 
-Say "Starting Steltic on $url" 'Cyan'
+Say "Starting Steltic Hub India on $url" 'Cyan'
 $hubArgs = @('-m', 'steltic_hub.cli', '--port', "$Port", '--no-browser')
 if ($Console) {
   Start-Process -FilePath $HubPy -ArgumentList $hubArgs -NoNewWindow
@@ -197,8 +200,8 @@ while ((Get-Date) -lt $deadline) {
   if (Hub-Alive $url) { $ready = $true; break }
   Start-Sleep -Milliseconds 400
 }
-if (-not $ready) { Fail "Steltic did not start within 90 s. See $LogFile and $Root\logs\hub.log." }
-Say "Steltic is running on $url." 'Green'
+if (-not $ready) { Fail "Steltic Hub India did not start within 90 s. See $LogFile and $Root\logs\hub.log." }
+Say "Steltic Hub India is running on $url." 'Green'
 
 if ($NoWindow) { exit 0 }
 
