@@ -276,12 +276,18 @@ class Registry:
                 log(f"[hub] {co} is not a git checkout -- replacing it")
                 _rmtree(co)
             log(f"[hub] cloning {m.git} ({m.branch})")
+            if m.private:
+                log(f"[hub] {m.name} is a private repository: the clone uses this PC's own git credentials "
+                    f"(credential manager / token); the alternative is Modules -> Use local copy...")
             config.MODULES_DIR.mkdir(parents=True, exist_ok=True)
             rc = _git(["clone", "--depth", "1", "--branch", m.branch, m.git, str(co)], log=log)
             if rc != 0:
                 if co.exists():
                     _rmtree(co)
-                raise RegistryError(f"clone failed for {mod_id} -- check the URL, the branch and your network")
+                raise RegistryError(f"clone failed for {mod_id} -- check the URL, the branch and your network"
+                                    + (" -- this is a PRIVATE repository: git needs your GitHub credentials "
+                                       "(a credential helper, or a token URL registered under Modules -> Add a module), "
+                                       "or link a working copy with Use local copy..." if m.private else ""))
         # the checkout may ship a newer manifest than the catalog: re-read before building the env
         m = self.manifest(mod_id)
         envs.create_env(m, self.module_root(mod_id), log=log, force=force_env)

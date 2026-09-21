@@ -1,35 +1,45 @@
 #!/usr/bin/env python3
-"""Query file manager grounding bridge: the design agents' standards-search API, answered from the local corpus.
+"""IS corpus grounding bridge: the design agents' standards-search API, answered from the India corpus.
 
-The HR Steel and CFS agents call ONE small HTTP API for spec grounding (see rag_v2/README.md in
-their repos):
+The HR Steel (IS 800) and CFS (IS 801) agents call ONE small HTTP API for spec grounding:
 
-    POST /query   {"query": "...", "collection": "engineering_standards_A360",
-                   "top_k": 5, "clause": "F2", "chapter": "F"}      -> {"results": [...]}
+    POST /query   {"query": "...", "collection": "engineering_standards_IS1893",
+                   "top_k": 5, "clause": "7.6.4", "stem": "IS_1893_Part_1_2016"}   -> {"results": [...]}
 
-It was written for a vector database. This server answers the same API from the QFM workspace
-instead -- the full-text + exact-id index that `scripts/build_index.py` builds over the licensed
-PDFs you converted, plus the OpenSees documentation and worked-example collections that ship with
-the module. No embeddings, no vector store, nothing leaves this PC.
+It was written for a hosted vector database. This server answers the same API from the
+engineering_rag_india workspace instead -- the full-text + exact-id index that the corpus repo's
+`scripts/build_index.py` builds over the converted BIS documents. No embeddings, no vector store,
+nothing leaves this PC.
 
-Collections the agents ask for are mapped onto the corpus:
+Collections the agents ask for (the names in steltic_india's `india_collections.py` and the corpus
+README) are mapped onto the corpus document stems:
 
-    engineering_standards_A360 / A341 / A358        -> AISC_360_22 / AISC_341_22 / AISC_358_22
-    engineering_standards_S100 / S240 / S400        -> AISI_S100 / AISI_S240 / AISI_S400_20
-    engineering_standards_ASCE7 / ASCE41 / A342     -> ASCE7 / ASCE_41_23 / AISC_342_22
-    steel_design_examples                           -> the examples collection (ships with QFM)
-    opensees_* / openseespy_documentation           -> the OpenSees collection (ships with QFM)
+    engineering_standards_IS800             -> IS_800_2007
+    engineering_standards_IS801 / IS811     -> IS_801_1975 / IS_811_1987
+    engineering_standards_IS808 / IS1161    -> IS_808_2021 / IS_1161_2014
+    engineering_standards_IS875_P1 .. P5    -> IS_875_Part_1_2026 .. IS_875_Part_5_1987
+    engineering_standards_IS1893            -> IS_1893_Part_1_2016 (+ Amd 1, Amd 2 consolidated)
+    engineering_standards_IS2062            -> IS_2062_Part_1_2025
+    engineering_standards_IS18168           -> IS_18168_2023
+    engineering_standards_IS816 / IS9595 / IS4000  -> connections (IS 816, IS 9595, IS 4000)
+
+Anything else goes through the corpus's own `resolve_doc` alias table (`IS 800`, `is_875_3`,
+`IS 875 (Part 4):2021` ...). A request that carries `stem` / `doc` (steltic_india sends both) is
+honoured when the collection name is unknown. The OpenSees / worked-example collections of the US
+Query file manager are NOT part of the India corpus: they answer with an empty `results` list and a
+note, which the agents treat as "no hit" (a non-2xx would pause their run).
 
 A `clause` filter becomes an exact section / equation / table lookup first; `chapter` keeps hits
-from that chapter; everything else is full-text search with the corpus's own alias expansion. A
-document that has not been converted yet answers with an empty `results` list -- the agents treat
-that as "no hit", whereas a non-2xx would pause their run.
+from that chapter; everything else is full-text search with the corpus's own alias expansion,
+town lookup (IS 875-3 Annex A / IS 1893 Annex E) and US-term trap (`found:false` with the IS
+equivalent). A document that is not in the corpus answers with an empty `results` list.
 
-Runs in QFM's own environment (stdlib + sqlite3, like the rest of its scripts). Started by the hub:
+Runs in the module's own environment (stdlib + sqlite3, like the rest of the corpus scripts).
+Started by the hub:
 
     rag_server.py --root <workspace> --port <port>
 
-GET /          a status page (what is converted, what the agents asked for lately)
+GET /          a status page (what is indexed, what the agents asked for lately)
 GET /healthz   {"ok": true, ...}
 """
 from __future__ import annotations
@@ -39,19 +49,39 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 # ---------------------------------------------------------------- collection mapping
+# engineering_standards_<KEY> -> corpus stem. Mirrors STEM_TO_COLLECTION in steltic_india's
+# india_collections.py and the "Documents and collections" table of the corpus README.
 SPEC = {
-    "A360": "AISC_360_22", "A341": "AISC_341_22", "A358": "AISC_358_22", "A342": "AISC_342_22",
-    "S100": "AISI_S100", "S240": "AISI_S240", "S400": "AISI_S400_20",
-    "ASCE7": "ASCE7", "ASCE_7": "ASCE7", "ASCE41": "ASCE_41_23", "ASCE_41": "ASCE_41_23",
-    "AISC_360_22": "AISC_360_22", "AISC_341_22": "AISC_341_22", "AISC_358_22": "AISC_358_22",
-    "AISC_342_22": "AISC_342_22", "AISI_S100": "AISI_S100", "AISI_S240": "AISI_S240",
-    "AISI_S400_20": "AISI_S400_20", "ASCE_41_23": "ASCE_41_23",
+    "IS800": "IS_800_2007", "IS_800": "IS_800_2007",
+    "IS801": "IS_801_1975", "IS_801": "IS_801_1975",
+    "IS811": "IS_811_1987", "IS_811": "IS_811_1987", "IS811_AMD1": "IS_811_1987_Amd1_2011",
+    "IS808": "IS_808_2021", "IS_808": "IS_808_2021",
+    "IS816": "IS_816_1969", "IS_816": "IS_816_1969",
+    "IS1161": "IS_1161_2014", "IS_1161": "IS_1161_2014",
+    "IS2062": "IS_2062_Part_1_2025", "IS_2062": "IS_2062_Part_1_2025", "IS2062_P1": "IS_2062_Part_1_2025",
+    "IS4000": "IS_4000_1992", "IS_4000": "IS_4000_1992",
+    "IS9595": "IS_9595_1996", "IS_9595": "IS_9595_1996",
+    "IS875_P1": "IS_875_Part_1_2026", "IS_875_P1": "IS_875_Part_1_2026", "IS875_PART1": "IS_875_Part_1_2026",
+    "IS875_P2": "IS_875_Part_2_1987", "IS_875_P2": "IS_875_Part_2_1987", "IS875_PART2": "IS_875_Part_2_1987",
+    "IS875_P3": "IS_875_Part_3_2015", "IS_875_P3": "IS_875_Part_3_2015", "IS875_PART3": "IS_875_Part_3_2015",
+    "IS875_P4": "IS_875_Part_4_1987", "IS_875_P4": "IS_875_Part_4_1987", "IS875_PART4": "IS_875_Part_4_1987",
+    "IS875_P5": "IS_875_Part_5_1987", "IS_875_P5": "IS_875_Part_5_1987", "IS875_PART5": "IS_875_Part_5_1987",
+    "IS1893": "IS_1893_Part_1_2016", "IS_1893": "IS_1893_Part_1_2016", "IS1893_P1": "IS_1893_Part_1_2016",
+    "IS1893_PART1": "IS_1893_Part_1_2016",
+    "IS18168": "IS_18168_2023", "IS_18168": "IS_18168_2023", "IS18168_2023": "IS_18168_2023",
 }
+# The stems themselves are accepted as collection names too.
+for _stem in ("IS_800_2007", "IS_801_1975", "IS_808_2021", "IS_811_1987", "IS_811_1987_Amd1_2011", "IS_816_1969",
+              "IS_1161_2014", "IS_2062_Part_1_2025", "IS_4000_1992", "IS_9595_1996", "IS_875_Part_1_2026",
+              "IS_875_Part_2_1987", "IS_875_Part_3_2015", "IS_875_Part_4_1987", "IS_875_Part_5_1987",
+              "IS_1893_Part_1_2016", "IS_18168_2023"):
+    SPEC[_stem.upper()] = _stem
+# The US Query file manager's bundled collections. Not in the India corpus; kept so a request for
+# them is answered with a note instead of "unknown collection" (the agents' contract still names
+# them for OpenSees API lookups). If a phase2_fts.sqlite is ever dropped into the workspace, the
+# corpus's own retrieval serves it.
 PHASE2 = {
     "steel_design_examples": ("examples", "steel_design_examples"),
-    # CFS Steel's contract and its agent both name this collection; without it every worked-example
-    # lookup that module makes comes back "unknown collection". The shipped corpus files its
-    # examples under one name, so both spellings land on it.
     "cfs_design_examples": ("examples", "steel_design_examples"),
     "examples": ("examples", None),
     "opensees_buildings_3d": ("opensees", "opensees_buildings_3d"),
@@ -60,35 +90,40 @@ PHASE2 = {
     "opensees_documentation": ("opensees", "opensees_documentation"),
     "opensees": ("opensees", None),
 }
+PREFIXES = ("engineering_standards_", "engineering_standard_")
 
 
 def map_collection(name: str):
     """-> ("spec", doc_stem) | ("phase2", group, source_collection | None) | None"""
     n = (name or "").strip()
-    if not n:
+    if not n or n.lower() in ("specification", "spec", "standards"):
         return ("spec", None)
     if n in PHASE2:
         g, src = PHASE2[n]
         return ("phase2", g, src)
-    key = n[len("engineering_standards_"):] if n.startswith("engineering_standards_") else n
-    key_u = key.upper()
+    key = n
+    for pre in PREFIXES:
+        if key.lower().startswith(pre):
+            key = key[len(pre):]
+            break
+    key_u = key.upper().replace("-", "_")
     if key_u in SPEC:
         return ("spec", SPEC[key_u])
-    if key in SPEC:
-        return ("spec", SPEC[key])
-    # e.g. "AISC 360-22" / "aisc360" -- let the corpus's own alias table decide
+    # "IS 800", "is_875_3", "IS 875 (Part 4):2021", "engineering_standards_is875_p3" -- the corpus's
+    # own alias table decides (retrieval.py DOC_ALIASES, present once sys.path is set)
     try:
-        from retrieval import resolve_doc     # noqa: F401  (present once sys.path is set)
-        r = resolve_doc(key)
-        if r and r != key:
-            return ("spec", r)
+        from retrieval import resolve_doc     # noqa: F401
+        for cand in (n, key):
+            r = resolve_doc(cand)
+            if r and r != cand and r.upper() in SPEC:
+                return ("spec", r)
     except Exception:
         pass
     return None
 
 
 _COMMENT = re.compile(r"^\s*(<!--.*?-->\s*)+", re.S)
-_EQ = re.compile(r"^[A-Z]{1,2}\d+(?:\.\d+)*-\d+[a-z]?$", re.I)
+_EQ = re.compile(r"^(?:[A-Z]{1,2}\d+(?:\.\d+)*-\d+[a-z]?|\d+(?:\.\d+)*-eq\d+)$", re.I)
 
 
 def _clean(text: str) -> str:
@@ -122,6 +157,26 @@ def shape_hit(h: dict) -> dict:
         "part": part,
         "authoritative": bool(h.get("authoritative")),
     }
+
+
+def _miss_note(r: dict) -> str:
+    """The corpus's own explanation of an empty answer, in one line: the US-term trap ("SDS is not
+    defined in IS 1893; use Z, I, Sa/g"), a town in neither annex (not_tabulated), nearest ids."""
+    if not isinstance(r, dict) or r.get("found"):
+        return ""
+    parts = []
+    if r.get("us_term"):
+        parts.append(f"US term {r['us_term']!r}: {r.get('note') or 'not defined in the IS documents'}")
+        if r.get("is_equivalent"):
+            parts.append(f"IS equivalent: {r['is_equivalent']}")
+    elif r.get("not_tabulated"):
+        parts.append(r.get("note") or "town not tabulated in IS 875-3 Annex A / IS 1893 Annex E (read the map)")
+    elif r.get("note"):
+        parts.append(str(r["note"]))
+    ids = r.get("nearest_ids") or []
+    if ids:
+        parts.append("nearest ids: " + ", ".join(str(i) for i in ids[:6]))
+    return "; ".join(str(x) for x in parts)[:400]
 
 
 # ---------------------------------------------------------------- corpus access
@@ -219,18 +274,21 @@ class Bridge:
     def status(self) -> dict:
         std = self.root / "documents" / "standards"
         pdfs = sorted(p.name for p in std.rglob("*.pdf")) if std.is_dir() else []
-        md = self.root / "markdown"
-        converted = sorted(p.stem for p in md.glob("*.md")) if md.is_dir() else []
+        # a converted document is documents/standards/<STEM>/markdown/<STEM>.search.md
+        converted = sorted(d.name for d in std.iterdir()
+                           if d.is_dir() and (d / "markdown" / f"{d.name}.search.md").is_file()) if std.is_dir() else []
         spec_index = (self.root / "search" / "spec_fts.sqlite").is_file()
         p2_index = (self.root / "search" / "phase2_fts.sqlite").is_file()
-        docs = []
+        docs, quality = [], {}
         try:
-            docs = sorted(str(k) for k in self.corpus().doc_meta)
+            meta = self.corpus().doc_meta
+            docs = sorted(str(k) for k in meta)
+            quality = {k: (v.get("quality") or "") for k, v in meta.items() if isinstance(v, dict)}
         except Exception:
             pass
         self.release()
-        return {"ok": True, "root": str(self.root), "pdfs": pdfs, "converted": converted,
-                "spec_index": spec_index, "phase2_index": p2_index, "indexed_docs": docs,
+        return {"ok": True, "root": str(self.root), "jurisdiction": "india", "pdfs": pdfs, "converted": converted,
+                "spec_index": spec_index, "phase2_index": p2_index, "indexed_docs": docs, "quality": quality,
                 "queries": len(self.recent), "uptime_s": int(time.time() - self.started)}
 
     # ----- the agents' call -----
@@ -259,18 +317,26 @@ class Bridge:
         hits: list[dict] = []
         target = map_collection(collection)
         if target is None and collection:
-            # A document the user converted under a stem the fixed table does not know (IS_875_3, an
-            # ASCE 7 converted as ASCE_7_22, ...) is still in the corpus: /healthz lists it under
-            # indexed_docs, so an agent that read /healthz may ask for it by that name.
-            key = collection[len("engineering_standards_"):] if collection.startswith("engineering_standards_") else collection
+            # steltic_india sends the stem beside the collection name ("stem" / "doc"); a document the
+            # user converted under a stem the fixed table does not know is still in the corpus, and
+            # /healthz lists it under indexed_docs, so an agent that read /healthz may ask by that name.
+            key = collection
+            for pre in PREFIXES:
+                if key.lower().startswith(pre):
+                    key = key[len(pre):]
+                    break
             try:
-                if key in self.corpus().doc_meta:
-                    target = ("spec", key)
+                meta = self.corpus().doc_meta
+                for cand in (str(body.get("stem") or ""), str(body.get("doc") or ""), key, collection):
+                    if cand and cand in meta:
+                        target = ("spec", cand)
+                        break
             except Exception:
                 pass
         try:
             if target is None:
-                note = f"unknown collection {collection!r}"
+                note = (f"unknown collection {collection!r} -- the India corpus serves engineering_standards_IS800, "
+                        f"IS801, IS808, IS811, IS816, IS1161, IS2062, IS4000, IS9595, IS875_P1..P5, IS1893, IS18168")
             elif target[0] == "spec":
                 hits, note, matched = self._spec(q, target[1], clause, chapter, top_k, qtype=qtype,
                                                  want_commentary=want_commentary, neighbors=neighbors)
@@ -297,12 +363,13 @@ class Bridge:
               qtype: str = "", want_commentary: bool = False, neighbors=None):
         c = self.corpus()
         if doc and doc not in c.doc_meta:
-            return [], (f"{doc} is not in the corpus yet -- convert it on the Convert tab "
-                        f"(canonical stem {doc}) and rebuild the index"), ""
+            return [], (f"{doc} is not in the corpus on this PC -- install or update the IS corpus module "
+                        f"(or convert the document on the Convert tab with the canonical stem {doc}) and rebuild the index"), ""
         if not (self.root / "search" / "spec_fts.sqlite").is_file():
-            return [], "no specification index yet -- convert a PDF and run Rebuild index on the Query file manager tabs", ""
+            return [], "no specification index yet -- install the IS corpus module (its post-install lays the workspace out) or run Rebuild index", ""
         hits: list[dict] = []
         matched = ""                                # which lookup answered: the caller must know
+        miss_note = ""                              # the corpus's own reason for an empty answer
         if clause:
             if qtype in ("exact_section", "exact_equation", "exact_table"):
                 kinds = (qtype,)                     # the policy named the kind: no guessing
@@ -321,6 +388,8 @@ class Bridge:
                          neighbors=0 if neighbors is None else neighbors, limit=max(top_k * 3, 12))
             hits = r.get("hits") or []
             matched = first if hits else ""
+            if not hits:
+                miss_note = _miss_note(r)
             if not hits and first != "keyword":
                 r = c.search("keyword", q, doc=doc, want_commentary=want_commentary, neighbors=0, limit=max(top_k * 3, 12))
                 hits = r.get("hits") or []
@@ -335,15 +404,17 @@ class Bridge:
             hits = r.get("hits") or []
             matched = "keyword" if hits else ""
         if want_commentary:
-            return hits, "", matched
-        # provisions only, unless the corpus has nothing else for this query
+            return hits, ("" if hits else miss_note), matched
+        # provisions only, unless the corpus has nothing else for this query (BIS documents carry
+        # no separate commentary: every India hit is part=standard)
         prov = [h for h in hits if h.get("part") in (None, "", "standard", "n/a")]
-        return (prov or hits), "", matched
+        return (prov or hits), ("" if hits else miss_note), matched
 
     def _phase2(self, q: str, group: str, source: str | None, top_k: int):
         c = self.corpus()
         if not (self.root / "search" / "phase2_fts.sqlite").is_file():
-            return [], "the OpenSees / examples index is missing -- reinstall Query file manager"
+            return [], (f"the {group} collection is not part of the India corpus (engineering_rag_india serves the IS "
+                        f"documents only) -- no hit; use the OpenSees documentation from memory and say so")
         want = max(top_k * 3, 12)
         r = c.search("fts", q, collection=group, neighbors=0, limit=want)
         hits = r.get("hits") or []
@@ -367,7 +438,7 @@ class Bridge:
 
 
 # ---------------------------------------------------------------- http
-PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>Query file manager — grounding</title><style>
+PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>IS corpus — grounding</title><style>
 body{{margin:0;padding:22px 26px;background:#14171c;color:#dde3ea;font:13px/1.55 'Segoe UI',system-ui,sans-serif}}
 h1{{font-size:17px;margin:0 0 4px}} h2{{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#5d6774;margin:22px 0 8px}}
 .dim{{color:#8b95a3}} .ok{{color:#3fc1a0}} .bad{{color:#e06b5e}} .warn{{color:#e0b341}}
@@ -377,11 +448,11 @@ th{{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#8b95a3
 .pill{{display:inline-block;font-size:10px;letter-spacing:.07em;text-transform:uppercase;padding:2px 8px;border-radius:4px;border:1px solid #3a4656;color:#8b95a3;margin-right:6px}}
 .pill.ok{{border-color:#3fc1a0;color:#3fc1a0}} .pill.warn{{border-color:#e0b341;color:#e0b341}}
 </style></head><body>
-<h1>Query file manager — grounding</h1>
-<div class="dim">The design agents' standards-search endpoint, answered from this PC's corpus. Workspace: <code>{root}</code></div>
+<h1>IS corpus — grounding</h1>
+<div class="dim">The design agents' standards-search endpoint (IS 800 / IS 801 / IS 875 / IS 1893 / IS 18168 …), answered from this PC's copy of engineering_rag_india. Workspace: <code>{root}</code></div>
 <h2>Corpus</h2>
-<p><span class="pill {p2cls}">OpenSees docs + worked examples</span> <span class="pill {speccls}">specifications</span></p>
-<p class="dim">Converted specifications: {converted}<br>PDFs in <code>documents/standards</code>: {pdfs}</p>
+<p><span class="pill {speccls}">IS documents (spec_fts)</span> <span class="pill {p2cls}">OpenSees docs + worked examples (not part of the India corpus)</span></p>
+<p class="dim">Indexed documents: {converted}</p>
 {hint}
 <h2>Recent agent queries ({n})</h2>
 <table><tr><th>when</th><th>collection</th><th>query</th><th>clause / chapter</th><th>hits</th><th>ms</th><th>note</th></tr>{rows}</table>
@@ -399,14 +470,15 @@ def render_page(b: Bridge) -> str:
                     f"<td class='{cls}'>{r['hits']}</td><td>{r['ms']}</td><td class='dim'>{html.escape(r['note'][:120])}</td></tr>")
     hint = ""
     if not st["spec_index"]:
-        hint = ("<p class='warn'>No specification corpus yet: put your licensed PDFs in the standards folder, convert each "
-                "one on the Convert tab with its canonical stem, then Rebuild index. Until then the agents get "
-                "OpenSees and worked-example hits only and cite the specifications from memory.</p>")
+        hint = ("<p class='warn'>No IS corpus on this PC yet: install the IS corpus module (git clone of the private "
+                "engineering_rag_india repo with your GitHub credentials, or link a working copy on disk) -- its "
+                "post-install copies the documents, indexes and search scripts here. Until then the agents cite "
+                "the IS documents from memory and flag every value to verify.</p>")
+    docs = ", ".join(f"{d} ({st['quality'][d]})" if st.get("quality", {}).get(d) else d for d in st["indexed_docs"])
     return PAGE.format(root=html.escape(st["root"]),
                        p2cls="ok" if st["phase2_index"] else "warn",
                        speccls="ok" if st["spec_index"] else "warn",
-                       converted=html.escape(", ".join(st["converted"]) or "(none)"),
-                       pdfs=html.escape(", ".join(st["pdfs"]) or "(none)"),
+                       converted=html.escape(docs or "(none)"),
                        hint=hint, n=len(b.recent), rows="".join(rows) or "<tr><td colspan=7 class='dim'>none yet</td></tr>")
 
 
@@ -454,8 +526,8 @@ def make_handler(bridge: Bridge):
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="Query file manager grounding bridge")
-    ap.add_argument("--root", required=True, help="QFM workspace (the folder with documents/, indexes/, search/)")
+    ap = argparse.ArgumentParser(description="IS corpus grounding bridge (engineering_rag_india)")
+    ap.add_argument("--root", required=True, help="corpus workspace (the folder with documents/, indexes/, search/, scripts/)")
     ap.add_argument("--scripts", default=None, help="folder holding retrieval.py (default: <root>/scripts)")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, required=True)
@@ -463,15 +535,15 @@ def main(argv=None) -> int:
     root = Path(a.root).resolve()
     scripts = Path(a.scripts).resolve() if a.scripts else root / "scripts"
     if not (scripts / "retrieval.py").is_file():
-        print(f"[qfm] retrieval.py not found in {scripts} -- reinstall Query file manager (its post-install lays the workspace out)")
+        print(f"[is-corpus] retrieval.py not found in {scripts} -- install or update the IS corpus module (its post-install lays the workspace out)")
         return 2
-    for d in ("documents/standards", "queue", "markdown"):
+    for d in ("documents/standards", "queue"):
         (root / d).mkdir(parents=True, exist_ok=True)
     bridge = Bridge(root, scripts)
     # Single-threaded on purpose: the corpus holds sqlite connections, which refuse to be used from
     # a thread other than the one that opened them. Queries take milliseconds; the agents wait.
     srv = HTTPServer((a.host, a.port), make_handler(bridge))
-    print(f"[qfm] grounding bridge on http://{a.host}:{a.port}  workspace={root}", flush=True)
+    print(f"[is-corpus] grounding bridge on http://{a.host}:{a.port}  workspace={root}", flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:

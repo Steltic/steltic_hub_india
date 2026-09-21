@@ -245,6 +245,10 @@ class Manifest:
     git: str = ""
     branch: str = "main"
     subdir: str = ""
+    # A repo the owner keeps private: the clone runs with the PC's own git credentials (a credential
+    # helper or a token in the URL), and the alternative is a working copy linked on disk. The hub
+    # only surfaces the fact; it never holds a credential of its own.
+    private: bool = False
     bundled: str = ""                       # a module whose code ships INSIDE the hub: catalog/<bundled>/
     # environment
     python: str = ""                        # "" -> hub default
@@ -299,7 +303,7 @@ class Manifest:
                 order=int(d.get("order", 100)), version=str(d.get("version", "")),
                 homepage=d.get("homepage", "") or src.get("url", ""),
                 git=src.get("url", ""), branch=src.get("branch") or "main", subdir=src.get("subdir", ""),
-                bundled=str(src.get("bundled") or ""),
+                bundled=str(src.get("bundled") or ""), private=bool(src.get("private", False)),
                 python=env.get("python", ""), install=env.get("install", ["-e", "."]),
                 extra_requirements=env.get("extra_requirements") or [],
                 post_install=env.get("post_install") or [],
@@ -360,7 +364,7 @@ class Manifest:
             "id": self.id, "name": self.name, "blurb": self.blurb, "accent": self.accent,
             "order": self.order, "version": self.version, "homepage": self.homepage,
             "git": self.git, "branch": self.branch, "has_server": self.has_server,
-            "bundled": bool(self.bundled),
+            "bundled": bool(self.bundled), "private": bool(self.private),
             "requires_servers": [r for r in (self.server.get("requires") or []) if r != self.id],
             "needs": self.needs, "wants_credentials": bool(self.credentials),
             "own_output_root": self.output_root != "{job_dir}",

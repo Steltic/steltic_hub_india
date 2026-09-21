@@ -990,6 +990,8 @@ function moduleCard(m) {
     el('p', { class: 'note' }, m.blurb),
     el('p', { class: 'meta', style: 'margin-top:8px' },
       st.linked ? `working copy: ${st.linked}` : m.bundled ? 'part of the hub' : `${m.git || '(no git source)'}  ${st.commit || ''}`),
+    m.private && !st.linked && !st.installed ? el('p', { class: 'note', style: 'color:var(--warn)' },
+      'Private repository: Install clones it with this PC\'s own GitHub credentials (git credential manager, or a token in a git URL you register); or use "Use local copy…" to link a checkout you already have.') : null,
     env.reason ? el('p', { class: 'note', style: 'color:var(--bad)' }, env.reason) : null,
     st.manifest_problem ? el('p', { class: 'note', style: 'color:var(--warn)' }, 'steltic_module.json in the checkout was ignored: ' + st.manifest_problem) : null,
     st.error ? el('p', { class: 'note', style: 'color:var(--bad)' }, st.error) : null,
