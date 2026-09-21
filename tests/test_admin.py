@@ -47,16 +47,16 @@ def test_hub_url_template_reaches_module_servers():
 def test_grammar_reads_the_batch_instruction_people_actually_type():
     r = grammar.parse("run J1 to hr then to nl, then when all done run J2 to cfs only, then J3 to hr")
     assert [(s["project"], s["module"], s["tab"]) for s in r["steps"]] == [
-        ("J1", "steltic", "design"), ("J1", "steltic_nonlinear", "run"), ("J2", "steltic_cfs", "design"), ("J3", "steltic", "design")]
+        ("J1", "steltic_india", "design"), ("J1", "steltic_nonlinear_india", "run"), ("J2", "steltic_CFS_india", "design"), ("J3", "steltic_india", "design")]
     assert r["steps"][0]["fields"] == {"brief": "@project"}
     assert not r["warnings"]
 
 
 def test_grammar_brief_sources_continue_and_warnings():
-    r = grammar.parse("J1 (ex22) to hr then nl; J2 with ex3 to cfs\nJ4 cfs continue: use thicker studs")
+    r = grammar.parse("J1 (in1) to hr then nl; J2 with in3 to cfs\nJ4 cfs continue: use thicker studs")
     briefs = [s["fields"].get("brief") for s in r["steps"]]
-    assert briefs == ["@example:ex22", None, "@example:ex3", "use thicker studs"]
-    assert r["steps"][3]["module"] == "steltic_cfs" and r["steps"][3]["tab"] == "continue"
+    assert briefs == ["@example:in1", None, "@example:in3", "use thicker studs"]
+    assert r["steps"][3]["module"] == "steltic_CFS_india" and r["steps"][3]["tab"] == "continue"
     r = grammar.parse("J9 to hr and make it snappy")
     assert [s["tab"] for s in r["steps"]] == ["design"]
     assert any("snappy" in w for w in r["warnings"])
@@ -67,21 +67,29 @@ def test_grammar_brief_sources_continue_and_warnings():
 # ---------------------------------------------------------------- standards
 def test_standards_scan_guesses_stems_and_skips_converted(tmp_path):
     folder = tmp_path / "standards"; folder.mkdir()
-    for n in ("AISC 360-22 Specification.pdf", "asce7-22.pdf", "AISI_S400-20.pdf", "mystery.pdf"):
+    for n in ("IS 800-2007 General Construction in Steel.pdf", "is1893_part1_2016.pdf", "IS_875_Part_3_2015.pdf",
+              "IS 18168 2023.pdf", "IS811_Amd1.pdf", "mystery.pdf"):
         (folder / n).write_bytes(b"%PDF-1.4\n")
-    root = tmp_path / "grokbot"; (root / "markdown").mkdir(parents=True)
-    (root / "markdown" / "AISC_360_22.search.md").write_text("x")
+    root = tmp_path / "grokbot"
+    # the India layout: documents/standards/<STEM>/markdown/<STEM>.search.md
+    (root / "documents" / "standards" / "IS_800_2007" / "markdown").mkdir(parents=True)
+    (root / "documents" / "standards" / "IS_800_2007" / "markdown" / "IS_800_2007.search.md").write_text("x")
     d = standards.scan(folder, root)
     by = {i["name"]: i for i in d["items"]}
-    assert by["AISC 360-22 Specification.pdf"]["stem"] == "AISC_360_22" and by["AISC 360-22 Specification.pdf"]["converted"]
-    assert by["asce7-22.pdf"]["stem"] == "ASCE7" and not by["asce7-22.pdf"]["converted"]
-    assert by["AISI_S400-20.pdf"]["stem"] == "AISI_S400_20"
+    assert by["IS 800-2007 General Construction in Steel.pdf"]["stem"] == "IS_800_2007" and by["IS 800-2007 General Construction in Steel.pdf"]["converted"]
+    assert by["is1893_part1_2016.pdf"]["stem"] == "IS_1893_Part_1_2016" and not by["is1893_part1_2016.pdf"]["converted"]
+    assert by["IS_875_Part_3_2015.pdf"]["stem"] == "IS_875_Part_3_2015"
+    assert by["IS 18168 2023.pdf"]["stem"] == "IS_18168_2023"
+    assert by["IS811_Amd1.pdf"]["stem"] == "IS_811_1987_Amd1_2011"
     assert by["mystery.pdf"]["stem"] == ""
-    steps = standards.build_steps([{"pdf": by["asce7-22.pdf"]["pdf"], "stem": "ASCE7"}], str(folder))
-    assert [s["tab"] for s in steps] == ["convert", "index", "audit"]
-    assert steps[0]["fields"]["pdf"].endswith("asce7-22.pdf") and steps[0]["fields"]["stem"] == "ASCE7"
+    steps = standards.build_steps([{"pdf": by["is1893_part1_2016.pdf"]["pdf"], "stem": "IS_1893_Part_1_2016"},
+                                   {"pdf": by["mystery.pdf"]["pdf"], "stem": ""}], str(folder))
+    assert [s["tab"] for s in steps] == ["convert", "index", "validate"]          # no stem, no convert step
+    assert all(s["module"] == "engineering_rag_india" for s in steps)
+    assert steps[0]["fields"]["pdf"].endswith("is1893_part1_2016.pdf") and steps[0]["fields"]["stem"] == "IS_1893_Part_1_2016"
+    assert steps[0]["fields"]["profile"] == "is_bis"
     assert steps[0]["on_fail"] == "continue" and steps[1]["on_fail"] == "stop"
-    assert steps[2]["fields"]["pdf_dir"] == str(folder)
+    assert steps[2]["fields"] == {}
 
 
 # ---------------------------------------------------------------- a fake hub
@@ -195,7 +203,7 @@ def fake_hub():
               {"id": "brief", "type": "textarea", "label": "Brief", "required": True, "has_default": False},
               {"id": "examples", "type": "select", "label": "Example", "fills": {"path": "/api/example/{value}", "key": "brief", "target": "brief"}}]
     mods = [
-        {"id": "steltic", "name": "HR Steel", "status": {"env_ready": True, "installed": True}, "missing_needs": [], "wants_credentials": True,
+        {"id": "steltic_india", "name": "HR Steel", "status": {"env_ready": True, "installed": True}, "missing_needs": [], "wants_credentials": True,
          "tabs": [{"id": "design", "title": "Design", "kind": "form", "run": {"kind": "http", "continues": None}, "fields": fields, "missing_optional": []},
                   {"id": "continue", "title": "Continue", "kind": "form", "run": {"kind": "http", "continues": "design"}, "missing_optional": [],
                    "fields": [{"id": "job", "type": "project", "label": "Project", "required": True},
@@ -208,11 +216,11 @@ def fake_hub():
                   {"id": "app", "title": "Full UI", "kind": "embed", "run": None, "fields": []}]},
         {"id": "steltic_x", "name": "X design", "status": {"env_ready": True, "installed": True}, "missing_needs": [], "wants_credentials": True,
          "tabs": [{"id": "flaky", "title": "Flaky (no continue tab)", "kind": "form", "run": {"kind": "http"}, "fields": [], "missing_optional": []}]},
-        {"id": "steltic_nonlinear", "name": "Nonlinear (SNL)", "status": {"env_ready": True}, "missing_needs": [], "wants_credentials": False,
+        {"id": "steltic_nonlinear_india", "name": "Nonlinear (SNL)", "status": {"env_ready": True}, "missing_needs": [], "wants_credentials": False,
          "tabs": [{"id": "run", "title": "Run", "kind": "form", "run": {"kind": "cli"}, "missing_optional": [],
                    "fields": [{"id": "job", "type": "project", "label": "Project", "required": True},
                               {"id": "package", "type": "file", "label": "Package", "required": False, "has_default": True}]}]},
-        {"id": "steltic_grokbot", "name": "Query file manager", "status": {"env_ready": True}, "missing_needs": [], "wants_credentials": False,
+        {"id": "engineering_rag_india", "name": "Query file manager", "status": {"env_ready": True}, "missing_needs": [], "wants_credentials": False,
          "tabs": [{"id": "convert", "title": "Convert PDF", "kind": "form", "run": {"kind": "cli"}, "missing_optional": ["converter"],
                    "fields": [{"id": "pdf", "type": "file", "label": "PDF", "required": True}]}]},
         {"id": "not_installed", "name": "Absent", "status": {"env_ready": False}, "missing_needs": [], "tabs": [{"id": "x", "title": "X", "kind": "form", "run": {"kind": "cli"}, "fields": []}]},
@@ -241,10 +249,10 @@ def test_sse_parser_matches_the_hubs_stream():
 def test_hub_client_runs_and_reports_the_outcome(fake_hub):
     hub, log = fake_hub
     seen = []
-    out = hub.run("steltic", "design", "J1", {"brief": "x"}, on_event=seen.append)
+    out = hub.run("steltic_india", "design", "J1", {"brief": "x"}, on_event=seen.append)
     assert out["ok"] and out["rc"] == 0 and out["run_id"] and out["artifacts"][0]["path"] == "report.html"
     assert [e["type"] for e in seen][:2] == ["start", "token"]
-    out = hub.run("steltic", "fail", "J1", {}, on_event=lambda e: None)
+    out = hub.run("steltic_india", "fail", "J1", {}, on_event=lambda e: None)
     assert not out["ok"] and out["rc"] == 1 and out["errors"] == ["boom"]
 
 
@@ -267,12 +275,12 @@ def test_validation_names_what_is_missing(fake_hub, tmp_path):
     hub, _ = fake_hub
     ex, jobs = _executor(tmp_path, hub)
     plan = plans.new_plan("t", [
-        {"project": "J1", "module": "steltic", "tab": "design", "fields": {"brief": "@project"}},
-        {"project": "J1", "module": "steltic", "tab": "app", "fields": {}},
+        {"project": "J1", "module": "steltic_india", "tab": "design", "fields": {"brief": "@project"}},
+        {"project": "J1", "module": "steltic_india", "tab": "app", "fields": {}},
         {"project": "J1", "module": "nope", "tab": "x", "fields": {}},
         {"project": "J1", "module": "not_installed", "tab": "x", "fields": {}},
-        {"project": "S", "module": "steltic_grokbot", "tab": "convert", "fields": {"pdf": "C:/x.pdf"}},
-        {"project": "J1", "module": "steltic", "tab": "design", "fields": {}},
+        {"project": "S", "module": "engineering_rag_india", "tab": "convert", "fields": {"pdf": "C:/x.pdf"}},
+        {"project": "J1", "module": "steltic_india", "tab": "design", "fields": {}},
     ])
     errors, warnings = ex.validate(plan)
     joined = "\n".join(errors)
@@ -283,7 +291,7 @@ def test_validation_names_what_is_missing(fake_hub, tmp_path):
     assert "optional component" in joined                # the converter gate, before pressing anything
     assert "Brief is required" in joined
     (jobs / "J1").mkdir(); (jobs / "J1" / "brief.md").write_text("4-story office")
-    errors, _ = ex.validate(plans.new_plan("t", [{"project": "J1", "module": "steltic", "tab": "design", "fields": {"brief": "@project"}}]))
+    errors, _ = ex.validate(plans.new_plan("t", [{"project": "J1", "module": "steltic_india", "tab": "design", "fields": {"brief": "@project"}}]))
     assert errors == []
 
 
@@ -291,7 +299,7 @@ def test_a_plan_runs_its_steps_in_order_and_keeps_the_logs(fake_hub, tmp_path):
     hub, log = fake_hub
     ex, jobs = _executor(tmp_path, hub)
     (jobs / "J1").mkdir(); (jobs / "J1" / "brief.md").write_text("4-story office, SMF")
-    r = grammar.parse("J1 to hr then nl; J2 (ex22) to hr")
+    r = grammar.parse("J1 to hr then nl; J2 (in1) to hr")
     plan = plans.new_plan("batch", r["steps"], source="…")
     ex.store.save(plan)
     n0 = len(log)
@@ -299,9 +307,9 @@ def test_a_plan_runs_its_steps_in_order_and_keeps_the_logs(fake_hub, tmp_path):
     p = _wait(ex, plan["id"])
     assert p["status"] == "done" and [s["status"] for s in p["steps"]] == ["done", "done", "done"]
     sent = log[n0:]
-    assert [(s["module"], s["tab"], s["job"]) for s in sent] == [("steltic", "design", "J1"), ("steltic_nonlinear", "run", "J1"), ("steltic", "design", "J2")]
+    assert [(s["module"], s["tab"], s["job"]) for s in sent] == [("steltic_india", "design", "J1"), ("steltic_nonlinear_india", "run", "J1"), ("steltic_india", "design", "J2")]
     assert sent[0]["fields"]["brief"] == "4-story office, SMF"          # @project -> the file's text
-    assert sent[2]["fields"]["brief"] == "brief of ex22 from steltic"   # @example -> the tab's own fills endpoint
+    assert sent[2]["fields"]["brief"] == "brief of in1 from steltic_india"   # @example -> the tab's own fills endpoint
     assert p["steps"][0]["artifacts"][0]["path"] == "report.html" and p["steps"][0]["run_id"]
     text = ex.store.log_tail(plan["id"], 1)
     assert "hello" in text and "working" in text and "✓ done" in text   # tokens joined on one line, then the log lines
@@ -311,9 +319,9 @@ def test_failure_policy_stop_skip_project_continue(fake_hub, tmp_path):
     hub, log = fake_hub
     ex, jobs = _executor(tmp_path, hub)
     mk = lambda on_fail: plans.new_plan("f", [
-        {"project": "A", "module": "steltic", "tab": "fail", "fields": {}, "on_fail": on_fail},
-        {"project": "A", "module": "steltic_nonlinear", "tab": "run", "fields": {}},
-        {"project": "B", "module": "steltic_nonlinear", "tab": "run", "fields": {}}])
+        {"project": "A", "module": "steltic_india", "tab": "fail", "fields": {}, "on_fail": on_fail},
+        {"project": "A", "module": "steltic_nonlinear_india", "tab": "run", "fields": {}},
+        {"project": "B", "module": "steltic_nonlinear_india", "tab": "run", "fields": {}}])
     for on_fail, expect in (("stop", ["failed", "pending", "pending"]),
                             ("skip_project", ["failed", "skipped", "done"]),
                             ("continue", ["failed", "done", "done"])):
@@ -333,8 +341,8 @@ def test_failure_policy_stop_skip_project_continue(fake_hub, tmp_path):
 def test_stop_cancels_the_current_run_through_the_hub(fake_hub, tmp_path):
     hub, log = fake_hub
     ex, jobs = _executor(tmp_path, hub)
-    plan = plans.new_plan("s", [{"project": "A", "module": "steltic", "tab": "slow", "fields": {}},
-                               {"project": "A", "module": "steltic_nonlinear", "tab": "run", "fields": {}}])
+    plan = plans.new_plan("s", [{"project": "A", "module": "steltic_india", "tab": "slow", "fields": {}},
+                               {"project": "A", "module": "steltic_nonlinear_india", "tab": "run", "fields": {}}])
     ex.store.save(plan); ex.start(plan["id"])
     assert ex.running == plan["id"]
     deadline = time.time() + 10
@@ -387,7 +395,7 @@ def test_classify_tells_a_server_outage_from_a_pause_from_a_dead_end():
     assert c({"errors": ["LLM call failed: LLM API 502: upstream connect error"]}) == "transient"
     assert c({"errors": ["LLM call failed: "]}) == "retryable"                     # HR Steel's str(ReadTimeout) is empty
     assert c({"errors": ["lost the hub's stream: ReadError: "]}) == "transient"
-    assert c({"errors": ["the hub at http://127.0.0.1:8300 did not answer: ConnectError"]}) == "transient"
+    assert c({"errors": ["the hub at http://127.0.0.1:8301 did not answer: ConnectError"]}) == "transient"
     assert c({"errors": ["CFS Steel refused the run (429): you already have a run in progress"]}) == "transient"
     assert c({"errors": ["LLM call failed: LLM API 400: Invalid JSON in tool call arguments: '{'"]}) == "retryable"
     assert c({"errors": ["call budget reached (200 model calls) -- run aborted"]}) == "final"
@@ -400,8 +408,8 @@ def test_classify_tells_a_server_outage_from_a_pause_from_a_dead_end():
 def test_resume_continues_a_stopped_design_where_it_stopped(fake_hub, tmp_path, fast_waits):
     hub, log = fake_hub
     ex, jobs = _executor(tmp_path, hub)
-    plan = plans.new_plan("s", [{"project": "C1", "module": "steltic", "tab": "design", "fields": {"brief": "slow"}},
-                               {"project": "C1", "module": "steltic_nonlinear", "tab": "run", "fields": {}}])
+    plan = plans.new_plan("s", [{"project": "C1", "module": "steltic_india", "tab": "design", "fields": {"brief": "slow"}},
+                               {"project": "C1", "module": "steltic_nonlinear_india", "tab": "run", "fields": {}}])
     ex.store.save(plan); ex.start(plan["id"])
     deadline = time.time() + 10
     while time.time() < deadline and not ex.current_run(plan["id"]):
@@ -414,7 +422,7 @@ def test_resume_continues_a_stopped_design_where_it_stopped(fake_hub, tmp_path, 
     ex.start(plan["id"]); p = _wait(ex, plan["id"])                      # Resume: the Continue tab, no fields, then the rest
     assert [s["status"] for s in p["steps"]] == ["done", "done"] and p["status"] == "done"
     sent = [(r["module"], r["tab"], r["job"], r["fields"]) for r in log[n0:]]
-    assert sent == [("steltic", "continue", "C1", {}), ("steltic_nonlinear", "run", "C1", {})]
+    assert sent == [("steltic_india", "continue", "C1", {}), ("steltic_nonlinear_india", "run", "C1", {})]
     assert p["steps"][0]["ran_tab"] == "continue" and p["steps"][0]["resume"] is False
     text = ex.store.log_tail(plan["id"], 1)
     assert "continues the Design run from where it stopped" in text and "resumed 'C1' from saved conversation" in text
@@ -430,13 +438,13 @@ def test_a_server_outage_is_waited_out_then_the_design_continues(fake_hub, tmp_p
     ex, jobs = _executor(tmp_path, hub)
     ex.probe = _probe_seq(False, False, True)                            # the model server: down, down, back
     BEHAVIOUR["flaky_fail"] = 1
-    plan = plans.new_plan("w", [{"project": "W1", "module": "steltic", "tab": "flaky", "fields": {}}])
+    plan = plans.new_plan("w", [{"project": "W1", "module": "steltic_india", "tab": "flaky", "fields": {}}])
     # the fake hub continues a "flaky" step through steltic's Continue tab: point the tab at it
     ex.store.save(plan); n0 = len(log)
     mods = {m["id"]: m for m in BEHAVIOUR["mods"]}
-    mods["steltic"]["tabs"][1]["run"]["continues"] = "flaky"
+    mods["steltic_india"]["tabs"][1]["run"]["continues"] = "flaky"
     ex.start(plan["id"]); p = _wait(ex, plan["id"])
-    mods["steltic"]["tabs"][1]["run"]["continues"] = "design"
+    mods["steltic_india"]["tabs"][1]["run"]["continues"] = "design"
     st = p["steps"][0]
     assert st["status"] == "done" and st["waited"] == 1 and st["continued"] == 0 and st["ran_tab"] == "continue"
     assert [(r["tab"], r["fields"]) for r in log[n0:]] == [("flaky", {}), ("continue", {})]
@@ -467,40 +475,40 @@ def test_a_pause_is_continued_by_itself_a_bounded_number_of_times(fake_hub, tmp_
     hub, log = fake_hub
     ex, jobs = _executor(tmp_path, hub)
     mods = {m["id"]: m for m in BEHAVIOUR["mods"]}
-    mods["steltic"]["tabs"][1]["run"]["continues"] = "pauser"
+    mods["steltic_india"]["tabs"][1]["run"]["continues"] = "pauser"
     try:
         BEHAVIOUR["continue"] = ["paused", "paused", "ok"]
-        plan = plans.new_plan("p", [{"project": "P1", "module": "steltic", "tab": "pauser", "fields": {}}], options={"auto_continue": 3})
+        plan = plans.new_plan("p", [{"project": "P1", "module": "steltic_india", "tab": "pauser", "fields": {}}], options={"auto_continue": 3})
         ex.store.save(plan); n0 = len(log); ex.start(plan["id"]); p = _wait(ex, plan["id"])
         st = p["steps"][0]
         assert st["status"] == "done" and st["continued"] == 3 and [r["tab"] for r in log[n0:]] == ["pauser", "continue", "continue", "continue"]
         assert "continuing from where it stopped (1 of 3)" in ex.store.log_tail(plan["id"], 1)
         BEHAVIOUR["continue"] = ["paused", "paused", "paused"]
-        plan = plans.new_plan("p", [{"project": "P2", "module": "steltic", "tab": "pauser", "fields": {}}], options={"auto_continue": 2})
+        plan = plans.new_plan("p", [{"project": "P2", "module": "steltic_india", "tab": "pauser", "fields": {}}], options={"auto_continue": 2})
         ex.store.save(plan); n0 = len(log); ex.start(plan["id"]); p = _wait(ex, plan["id"])
         st = p["steps"][0]
         assert st["status"] == "failed" and st["continued"] == 2 and "after 2 continues" in st["note"] and "no progress" in st["note"]
         assert [r["tab"] for r in log[n0:]] == ["pauser", "continue", "continue"]
         assert st["resume"] is True                                       # Resume with retry continues it again
     finally:
-        mods["steltic"]["tabs"][1]["run"]["continues"] = "design"
+        mods["steltic_india"]["tabs"][1]["run"]["continues"] = "design"
 
 
 def test_a_dead_end_is_not_continued_and_nothing_to_resume_starts_over_once(fake_hub, tmp_path, fast_waits):
     hub, log = fake_hub
     ex, jobs = _executor(tmp_path, hub)
     mods = {m["id"]: m for m in BEHAVIOUR["mods"]}
-    mods["steltic"]["tabs"][1]["run"]["continues"] = "budget"
+    mods["steltic_india"]["tabs"][1]["run"]["continues"] = "budget"
     try:
-        plan = plans.new_plan("b", [{"project": "B1", "module": "steltic", "tab": "budget", "fields": {}}])
+        plan = plans.new_plan("b", [{"project": "B1", "module": "steltic_india", "tab": "budget", "fields": {}}])
         ex.store.save(plan); n0 = len(log); ex.start(plan["id"]); p = _wait(ex, plan["id"])
         st = p["steps"][0]
         assert st["status"] == "failed" and st["continued"] == 0 and "call budget" in st["note"] and [r["tab"] for r in log[n0:]] == ["budget"]
     finally:
-        mods["steltic"]["tabs"][1]["run"]["continues"] = "design"
+        mods["steltic_india"]["tabs"][1]["run"]["continues"] = "design"
     # a step marked resumable whose module has nothing saved: the continue is refused (409), the step starts over
     (jobs / "N1").mkdir(); (jobs / "N1" / "brief.md").write_text("fresh")
-    plan = plans.new_plan("n", [{"project": "N1", "module": "steltic", "tab": "design", "fields": {"brief": "@project"}}])
+    plan = plans.new_plan("n", [{"project": "N1", "module": "steltic_india", "tab": "design", "fields": {"brief": "@project"}}])
     plan["steps"][0].update(status="stopped", run_id="r-old")
     ex.store.save(plan); n0 = len(log)
     BEHAVIOUR["continue"] = ["409"]
@@ -515,7 +523,7 @@ def test_stop_ends_a_wait_for_the_server(fake_hub, tmp_path, fast_waits):
     ex.probe = _probe_seq(False)                                          # never comes back
     BEHAVIOUR["flaky_fail"] = 1
     plan = plans.new_plan("w", [{"project": "W4", "module": "steltic_x", "tab": "flaky", "fields": {}},
-                               {"project": "W4", "module": "steltic_nonlinear", "tab": "run", "fields": {}}])
+                               {"project": "W4", "module": "steltic_nonlinear_india", "tab": "run", "fields": {}}])
     ex.store.save(plan); ex.start(plan["id"])
     deadline = time.time() + 10
     while time.time() < deadline and "waiting for the model server" not in (ex.store.load(plan["id"])["steps"][0]["note"] or ""):
@@ -532,7 +540,7 @@ def test_stop_ends_a_wait_for_the_server(fake_hub, tmp_path, fast_waits):
 # ---------------------------------------------------------------- help
 def test_help_corpus_finds_the_passage_and_answers_without_a_model(tmp_path):
     root = tmp_path / "repo"; (root / "docs").mkdir(parents=True); (root / ".git").mkdir()
-    (root / "README.md").write_text("# Thing\n\nThe nonlinear module picks up the HR Steel design through run.stage and {out.steltic}.\n")
+    (root / "README.md").write_text("# Thing\n\nThe nonlinear module picks up the HR Steel design through run.stage and {out.steltic_india}.\n")
     (root / "docs" / "other.md").write_text("Unrelated text about lunch.\n")
     (root / "code.py").write_text("def stage_inputs(run, ctx, log):\n    '''copies the design package'''\n")
     (root / ".git" / "secret.md").write_text("nonlinear nonlinear nonlinear")
@@ -544,8 +552,8 @@ def test_help_corpus_finds_the_passage_and_answers_without_a_model(tmp_path):
     ans = helpdesk.answer("q", hits)
     assert ans["model"] is None and "run.stage" in ans["answer"]
     assert helpdesk.answer("q", [])["answer"].startswith("Nothing")
-    assert helpdesk.GitHub.parse_repo("https://github.com/Steltic/steltic_cfs") == ("Steltic", "steltic_cfs")
-    assert helpdesk.GitHub.parse_repo("https://github.com/Steltic/steltic.git") == ("Steltic", "steltic")
+    assert helpdesk.GitHub.parse_repo("https://github.com/Steltic/steltic_CFS_india") == ("Steltic", "steltic_CFS_india")
+    assert helpdesk.GitHub.parse_repo("https://github.com/Steltic/steltic_india.git") == ("Steltic", "steltic_india")
 
 
 # ---------------------------------------------------------------- the server
@@ -560,7 +568,7 @@ def test_admin_server_routes(tmp_path):
     d = c.post("/api/plan/parse", json={"text": "J1 to hr then nl"}).json()
     assert len(d["plan"]["steps"]) == 2 and d["errors"]           # no hub behind it in this test -> says so
     r = c.post("/api/plans", json={"plan": d["plan"]}).json()
-    assert r["ok"] and c.get("/api/plans/" + r["id"]).json()["steps"][1]["module"] == "steltic_nonlinear"
+    assert r["ok"] and c.get("/api/plans/" + r["id"]).json()["steps"][1]["module"] == "steltic_nonlinear_india"
     assert c.get("/api/plans").json()["plans"][0]["id"] == r["id"]
     assert c.post(f"/api/plans/{r['id']}/stop").status_code == 409
     assert c.get(f"/api/plans/{r['id']}/log/1").json()["text"] == ""

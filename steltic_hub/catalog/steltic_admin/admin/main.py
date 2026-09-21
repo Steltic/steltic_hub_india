@@ -23,7 +23,7 @@ from .hub import HubClient, HubError
 
 HERE = pathlib.Path(__file__).resolve().parent
 UI = HERE / "ui"
-HUB_URL = (os.environ.get("HUB_URL") or "http://127.0.0.1:8300").rstrip("/")
+HUB_URL = (os.environ.get("HUB_URL") or "http://127.0.0.1:8301").rstrip("/")
 HUB_DATA = pathlib.Path(os.environ.get("HUB_DATA") or (pathlib.Path.cwd() / "hub_data")).resolve()
 HUB_JOBS = pathlib.Path(os.environ.get("HUB_JOBS") or (HUB_DATA / "jobs")).resolve()
 HUB_CATALOG = pathlib.Path(os.environ.get("HUB_CATALOG") or "").resolve() if os.environ.get("HUB_CATALOG") else None

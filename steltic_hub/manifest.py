@@ -287,7 +287,7 @@ class Manifest:
             raise ManifestError(f"{origin}: schema must be an integer")
         if schema > SCHEMA:
             raise ManifestError(f"{origin}: manifest schema {schema} is newer than this hub "
-                                f"(supports {SCHEMA}) -- update Steltic Hub")
+                                f"(supports {SCHEMA}) -- update Steltic Hub India")
         for req in ("id", "name"):
             if not d.get(req) or not isinstance(d.get(req), str):
                 raise ManifestError(f"{origin}: manifest missing {req!r}")

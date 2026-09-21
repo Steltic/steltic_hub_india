@@ -15,17 +15,17 @@ from steltic_hub import config, jobs, runners                            # noqa:
 # ---------------------------------------------------------------- catalog
 def test_every_bundled_manifest_parses():
     cat = load_catalog(config.CATALOG_DIR)
-    assert set(cat) == {"steltic", "steltic_cfs", "steltic_nonlinear", "steltic_grokbot", "steltic_variations",
+    assert set(cat) == {"steltic_india", "steltic_CFS_india", "steltic_nonlinear_india", "engineering_rag_india", "steltic_variations",
                         "steltic_probabilistic", "steltic_admin"}
     for m in cat.values():
         assert m.tabs and m.name
         assert m.git or m.bundled
     v = cat["steltic_variations"]
     assert v.bundled == "steltic_variations" and (config.CATALOG_DIR / v.bundled / "steltic_module.json").is_file()
-    assert v.server.get("requires") == ["steltic"] and v.env_vars["STELTIC_URL"] == "{server.steltic}"
+    assert v.server.get("requires") == ["steltic_india"] and v.env_vars["STELTIC_URL"] == "{server.steltic_india}"
     pr = cat["steltic_probabilistic"]
-    assert pr.bundled == "steltic_probabilistic" and pr.needs == ["steltic", "steltic_nonlinear"]
-    assert pr.env_vars["DDM_PYTHON"] == "{python.steltic_nonlinear}" and pr.env_vars["STELTIC_ENGINE_DIR"] == "{need.steltic}/steel_engine"
+    assert pr.bundled == "steltic_probabilistic" and pr.needs == ["steltic_india", "steltic_nonlinear_india"]
+    assert pr.env_vars["DDM_PYTHON"] == "{python.steltic_nonlinear_india}" and pr.env_vars["STELTIC_ENGINE_DIR"] == "{need.steltic_india}/steel_engine"
     for f in ("probabilistic/worker.py", "probabilistic/main.py", "probabilistic/ui/index.html", "requirements.txt"):
         assert (config.CATALOG_DIR / pr.bundled / f).is_file()
 
@@ -33,12 +33,12 @@ def test_every_bundled_manifest_parses():
 def test_no_module_specific_code_in_the_hub():
     """The hub must never BRANCH on a module id -- that is the whole modularity claim.
 
-    Prose is fine (envs.py explains the steltic/steltic_cfs package collision at length); what
+    Prose is fine (envs.py explains the steltic/steltic_CFS_india package collision at length); what
     must not exist is executable code that treats one module differently from another.
     """
     import ast, re
     offenders = []
-    ids = ("steltic_cfs", "steltic_nonlinear", "steltic_grokbot", "grokbot", "nlrha", "pushover")
+    ids = ("steltic_CFS_india", "steltic_nonlinear_india", "engineering_rag_india", "grokbot", "nlrha", "pushover")
 
     for p in config.PKG.glob("*.py"):
         tree = ast.parse(p.read_text(encoding="utf-8"))
@@ -119,15 +119,15 @@ def test_expand_substitutes_without_a_shell():
 
 
 def test_cli_args_maps_fields_to_flags():
-    m = load_catalog(config.CATALOG_DIR)["steltic_nonlinear"]
+    m = load_catalog(config.CATALOG_DIR)["steltic_nonlinear_india"]
     tab = next(t for t in m.tabs if t.id == "run")
-    args = runners.cli_args(tab, {"risk_category": "IV", "n_records": 11, "only": ""}, {})
-    assert "--risk-category" in args and "IV" in args
+    args = runners.cli_args(tab, {"level": "MCE", "n_records": 11, "only": ""}, {})
+    assert "--level" in args and "MCE" in args
     assert "--only" not in args                           # empty values are dropped
 
 
 def test_flag_if_true_style():
-    m = load_catalog(config.CATALOG_DIR)["steltic_nonlinear"]
+    m = load_catalog(config.CATALOG_DIR)["steltic_nonlinear_india"]
     tab = next(t for t in m.tabs if t.id == "mesh")
     assert "--dry-run" in runners.cli_args(tab, {"dry_run": True}, {})
     assert "--dry-run" not in runners.cli_args(tab, {"dry_run": False}, {})
@@ -157,16 +157,16 @@ def test_the_two_design_modules_would_collide_in_one_env():
     """The reason envs.py creates one venv per module. If this ever fails, the two repos have
     stopped sharing package names and the isolation could in principle be relaxed."""
     cat = load_catalog(config.CATALOG_DIR)
-    a, b = cat["steltic"], cat["steltic_cfs"]
+    a, b = cat["steltic_india"], cat["steltic_CFS_india"]
     assert a.install == b.install == ["-e", "."]
     from steltic_hub import envs
-    assert envs.env_dir("steltic") != envs.env_dir("steltic_cfs")
+    assert envs.env_dir("steltic_india") != envs.env_dir("steltic_CFS_india")
 
 
 def test_module_output_roots_do_not_overlap():
     cat = load_catalog(config.CATALOG_DIR)
     roots = {m.id: m.output_root for m in cat.values()}
-    assert roots["steltic"] != roots["steltic_cfs"]
+    assert roots["steltic_india"] != roots["steltic_CFS_india"]
 
 
 # ---------------------------------------------------------------- app
@@ -227,7 +227,7 @@ def test_link_rejects_a_mismatched_id(tmp_path):
 def test_link_rejects_a_missing_directory():
     from steltic_hub.registry import Registry, RegistryError
     with pytest.raises(RegistryError):
-        Registry().link("steltic", "/no/such/path/anywhere")
+        Registry().link("steltic_india", "/no/such/path/anywhere")
 
 
 # ---------------------------------------------------------------- windowless start
@@ -262,7 +262,7 @@ def test_ensure_streams_is_a_no_op_with_a_console():
 
 
 def test_declared_needs_are_checked_before_a_run():
-    """steltic_nonlinear points STELTIC_ENGINE_DIR at {need.steltic}/steel_engine. With HR Steel
+    """steltic_nonlinear_india points STELTIC_ENGINE_DIR at {need.steltic_india}/steel_engine. With HR Steel
     missing that expands to a path that does not exist and the DDM step fails ~40 minutes in, so
     the hub refuses the run up front instead."""
     from steltic_hub.main import app
@@ -270,10 +270,10 @@ def test_declared_needs_are_checked_before_a_run():
     from steltic_hub.registry import Registry
 
     reg = Registry()
-    if reg.is_installed("steltic"):
+    if reg.is_installed("steltic_india"):
         pytest.skip("HR Steel is installed here, so there is nothing to refuse")
     with TestClient(app) as c:
-        r = c.post("/api/run/steltic_nonlinear/run",
+        r = c.post("/api/run/steltic_nonlinear_india/run",
                    json={"job": "NeedsCheck", "fields": {"package": "x.zip"}})
         body = r.text
     assert "needs HR Steel" in body, body
@@ -287,13 +287,13 @@ def test_optional_component_is_checked_before_a_run(monkeypatch):
     from steltic_hub import envs, main as M
     from steltic_hub.registry import Registry
     from fastapi.testclient import TestClient
-    m = Registry().manifest("steltic_grokbot")
+    m = Registry().manifest("engineering_rag_india")
     conv = next(t for t in m.tabs if t.id == "convert")
     assert conv.requires_optional == ["converter"] and "converter" in m.optional
     monkeypatch.setattr(M.REG, "is_installed", lambda mid: True)
     monkeypatch.setattr(envs, "optional_present", lambda m_, g: False)
     with TestClient(M.app) as c:
-        body = c.post("/api/run/steltic_grokbot/convert", json={"job": "OptCheck", "fields": {"pdf": "A360-22.pdf"}}).text
+        body = c.post("/api/run/engineering_rag_india/convert", json={"job": "OptCheck", "fields": {"pdf": "IS_800_2007.pdf", "stem": "IS_800_2007"}}).text
     assert "PDF converter (Docling 2.123.1)" in body and "Modules tab" in body and '"ok": false' in body.lower()
 
 
@@ -303,7 +303,7 @@ def test_optional_probe_checks_every_import(monkeypatch, tmp_path):
     docling[rapidocr] extra that brings the runtime along."""
     from steltic_hub import envs
     from steltic_hub.registry import Registry
-    m = Registry().manifest("steltic_grokbot")
+    m = Registry().manifest("engineering_rag_india")
     conv = m.optional["converter"]
     assert conv["requirements"] == ["docling[rapidocr]==2.123.1"]
     assert envs.probe_imports(conv) == ["docling", "rapidocr", "onnxruntime"]
@@ -394,17 +394,17 @@ def test_shutdown_only_retires_its_own_url_marker(monkeypatch, tmp_path):
     from fastapi.testclient import TestClient
     marker = tmp_path / "hub.url"
     monkeypatch.setattr(M.config, "URL_FILE", marker)
-    marker.write_text("http://127.0.0.1:8300", encoding="utf-8")
-    M.app.state.url = "http://127.0.0.1:8300"
+    marker.write_text("http://127.0.0.1:8301", encoding="utf-8")
+    M.app.state.url = "http://127.0.0.1:8301"
     try:
         with TestClient(M.app):
             pass
         assert not marker.exists()                                          # ours: retired
-        marker.write_text("http://127.0.0.1:8300", encoding="utf-8")
+        marker.write_text("http://127.0.0.1:8302", encoding="utf-8")
         M.app.state.url = "http://127.0.0.1:8301"                            # the marker is the successor's
         with TestClient(M.app):
             pass
-        assert marker.read_text(encoding="utf-8") == "http://127.0.0.1:8300"
+        assert marker.read_text(encoding="utf-8") == "http://127.0.0.1:8302"
     finally:
         del M.app.state.url
 
@@ -477,8 +477,8 @@ def test_state_reports_missing_dependencies():
     from fastapi.testclient import TestClient
     with TestClient(app) as c:
         mods = {m["id"]: m for m in c.get("/api/state").json()["modules"]}
-    assert "missing_needs" in mods["steltic_nonlinear"]
-    assert mods["steltic"]["missing_needs"] == []      # HR Steel needs nothing
+    assert "missing_needs" in mods["steltic_nonlinear_india"]
+    assert mods["steltic_india"]["missing_needs"] == []      # HR Steel needs nothing
 
 
 # ---------------------------------------------------------------- templating (single pass, typed values)
@@ -493,11 +493,11 @@ def test_expand_is_single_pass_and_leaves_unknown_placeholders():
 def test_out_templates_point_at_each_modules_output_root():
     from steltic_hub.registry import Registry
     reg = Registry()
-    m = load_catalog(config.CATALOG_DIR)["steltic_nonlinear"]
+    m = load_catalog(config.CATALOG_DIR)["steltic_nonlinear_india"]
     ctx = runners.base_ctx(m, "Tower", reg)
-    assert ctx["out.steltic_nonlinear"] == str(jobs.job_path("Tower"))
-    assert pathlib.Path(ctx["out.steltic"]) == config.DATA / "modules_data" / "steltic" / "sessions" / "local" / "jobs" / "Tower"
-    assert ctx["need.steltic"] == str(reg.module_root("steltic"))
+    assert ctx["out.steltic_nonlinear_india"] == str(jobs.job_path("Tower"))
+    assert pathlib.Path(ctx["out.steltic_india"]) == config.DATA / "modules_data" / "steltic_india" / "sessions" / "local" / "jobs" / "Tower"
+    assert ctx["need.steltic_india"] == str(reg.module_root("steltic_india"))
 
 
 def test_python_template_names_a_needed_modules_interpreter(monkeypatch):
@@ -508,18 +508,18 @@ def test_python_template_names_a_needed_modules_interpreter(monkeypatch):
     reg = Registry()
     m = load_catalog(config.CATALOG_DIR)["steltic_probabilistic"]
     ctx = runners.base_ctx(m, "Tower", reg)
-    assert "python.steltic_nonlinear" not in ctx                          # not installed here
-    monkeypatch.setattr(envs, "env_ready", lambda mid: mid == "steltic_nonlinear")
+    assert "python.steltic_nonlinear_india" not in ctx                          # not installed here
+    monkeypatch.setattr(envs, "env_ready", lambda mid: mid == "steltic_nonlinear_india")
     ctx = runners.base_ctx(m, "Tower", reg)
-    assert ctx["python.steltic_nonlinear"] == str(envs.python_bin("steltic_nonlinear"))
-    assert "python.steltic" not in ctx
+    assert ctx["python.steltic_nonlinear_india"] == str(envs.python_bin("steltic_nonlinear_india"))
+    assert "python.steltic_india" not in ctx
     env = runners.expand(m.env_vars, ctx)
-    assert env["DDM_PYTHON"] == str(envs.python_bin("steltic_nonlinear")) and env["STELTIC_ENGINE_DIR"].endswith("steel_engine")
+    assert env["DDM_PYTHON"] == str(envs.python_bin("steltic_nonlinear_india")) and env["STELTIC_ENGINE_DIR"].endswith("steel_engine")
 
 
 def test_field_values_resolve_files_inside_the_project_and_keep_zero():
     from steltic_hub.registry import Registry
-    m = load_catalog(config.CATALOG_DIR)["steltic_nonlinear"]
+    m = load_catalog(config.CATALOG_DIR)["steltic_nonlinear_india"]
     tab = next(t for t in m.tabs if t.id == "run")
     ctx = runners.build_ctx(m, "FV", {"package": "pkg.zip", "n_records": 0, "dt": "", "parallel": "3"},
                             Registry(), tab=tab)
@@ -530,7 +530,7 @@ def test_field_values_resolve_files_inside_the_project_and_keep_zero():
     assert vals["parallel"] == 3
     # the package default is another module's output folder
     ctx2 = runners.build_ctx(m, "FV", {}, Registry(), tab=tab)
-    assert ctx2["_fields"]["package"] == ctx2["out.steltic"]
+    assert ctx2["_fields"]["package"] == ctx2["out.steltic_india"]
     with pytest.raises(runners.RunError):
         runners.build_ctx(m, "FV", {"package": "../../etc/passwd"}, Registry(), tab=tab)
 
@@ -605,7 +605,7 @@ def test_sse_parser_survives_split_multibyte_and_comments():
 # ---------------------------------------------------------------- catalog contract
 def test_design_modules_can_be_stopped_and_fill_their_briefs():
     cat = load_catalog(config.CATALOG_DIR)
-    for mid in ("steltic", "steltic_cfs"):
+    for mid in ("steltic_india", "steltic_CFS_india"):
         m = cat[mid]
         for t in m.tabs:
             if t.run and t.run.kind == "http":
@@ -637,7 +637,7 @@ def test_projects_can_be_created_and_required_fields_are_checked():
         r = c.post("/api/jobs/My%20Tower%20(2)")
         assert r.json()["name"] == "My_Tower_2"
         assert "My_Tower_2" in [j["name"] for j in c.get("/api/state").json()["jobs"]]
-        body = c.post("/api/run/steltic/design", json={"job": "My_Tower_2", "fields": {"brief": ""}}).text
+        body = c.post("/api/run/steltic_india/design", json={"job": "My_Tower_2", "fields": {"brief": ""}}).text
         assert "is required" in body or "not installed" in body
         st = c.get("/api/state").json()
         assert "server_url" in st["modules"][0] and "running" in st
@@ -648,7 +648,7 @@ def test_projects_can_be_created_and_required_fields_are_checked():
 # ---------------------------------------------------------------- grounding bridge (a catalog asset)
 def _bridge():
     import importlib.util
-    p = config.CATALOG_DIR / "steltic_grokbot" / "rag_server.py"
+    p = config.CATALOG_DIR / "engineering_rag_india" / "rag_server.py"
     spec = importlib.util.spec_from_file_location("rag_server", p)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -656,24 +656,32 @@ def _bridge():
 
 
 def test_bridge_maps_the_agents_collections_onto_the_corpus():
+    """The collection names steltic_india's india_collections.py sends -> the corpus stems of the README table."""
     b = _bridge()
-    assert b.map_collection("engineering_standards_A360") == ("spec", "AISC_360_22")
-    assert b.map_collection("engineering_standards_S400") == ("spec", "AISI_S400_20")
+    assert b.map_collection("engineering_standards_IS800") == ("spec", "IS_800_2007")
+    assert b.map_collection("engineering_standards_IS1893") == ("spec", "IS_1893_Part_1_2016")
+    assert b.map_collection("engineering_standards_IS875_P3") == ("spec", "IS_875_Part_3_2015")
+    assert b.map_collection("engineering_standards_is875_p2") == ("spec", "IS_875_Part_2_1987")
+    assert b.map_collection("engineering_standard_IS18168") == ("spec", "IS_18168_2023")      # the other prefix spelling
+    assert b.map_collection("IS_808_2021") == ("spec", "IS_808_2021")                          # a stem is a collection too
+    assert b.map_collection("engineering_standards_IS801") == ("spec", "IS_801_1975")
+    assert b.map_collection("") == ("spec", None)
+    # the US Query file manager's bundled collections: known names, answered "not in the India corpus" (never 5xx)
     assert b.map_collection("steel_design_examples") == ("phase2", "examples", "steel_design_examples")
     assert b.map_collection("openseespy_documentation") == ("phase2", "opensees", "openseespy_documentation")
-    assert b.map_collection("engineering_standards_ASCE41") == ("spec", "ASCE_41_23")
+    assert b.map_collection("engineering_standards_A360") is None                             # not an IS document
     assert b.map_collection("nonsense") is None
 
 
 def test_bridge_shapes_hits_the_way_the_agents_render_them():
     b = _bridge()
-    hit = {"doc": "AISC_360_22", "section_id": "F2.1", "title": "Yielding", "part": "standard",
-           "text": "<!-- chunk_id: x --> <!-- meta: {} -->\nMn = Mp = Fy Zx (F2-1)", "printed_label": "16.1-47",
-           "id": "F2.1", "authoritative": True, "score": -9.5, "neighbors": [{"section_id": "F2.2", "title": "LTB", "text": "..."}]}
+    hit = {"doc": "IS_800_2007", "section_id": "7.1.2", "title": "Design Strength", "part": "standard",
+           "text": "<!-- chunk_id: x --> <!-- meta: {} -->\nPd = Ae fcd (7.1.2)", "printed_label": "34",
+           "id": "7.1.2", "authoritative": True, "score": -9.5, "neighbors": [{"section_id": "7.1.2.1", "title": "fcd", "text": "..."}]}
     out = b.shape_hit(hit)
-    assert out["text"].startswith("[AISC_360_22 F2.1 (standard)] Yielding\nMn = Mp")
-    assert "chunk_id" not in out["text"] and "F2-1" in out["text"] and "-- F2.2 LTB" in out["text"]
-    assert out["source"] == "AISC_360_22" and out["section"] == "F2.1" and out["page"] == "16.1-47"
+    assert out["text"].startswith("[IS_800_2007 7.1.2 (standard)] Design Strength\nPd = Ae fcd")
+    assert "chunk_id" not in out["text"] and "(7.1.2)" in out["text"] and "-- 7.1.2.1 fcd" in out["text"]
+    assert out["source"] == "IS_800_2007" and out["section"] == "7.1.2" and out["page"] == "34" and out["authoritative"]
 
 
 def test_bridge_answers_empty_not_error_for_unknown_and_unconverted(tmp_path):
@@ -683,40 +691,49 @@ def test_bridge_answers_empty_not_error_for_unknown_and_unconverted(tmp_path):
     (root / "scripts").mkdir(parents=True); (root / "documents" / "standards").mkdir(parents=True)
     (root / "scripts" / "retrieval.py").write_text(
         "class Corpus:\n"
-        "    def __init__(self, root): self.doc_meta = {'opensees_documentation': {}}\n"
-        "    def search(self, *a, **k): return {'found': False, 'hits': []}\n"
+        "    def __init__(self, root): self.doc_meta = {'IS_1893_Part_1_2016': {}}\n"
+        "    def search(self, *a, **k): return {'found': False, 'hits': [], 'us_term': 'SDS', 'note': 'not defined in IS 1893', 'is_equivalent': 'Z, I, Sa/g'}\n"
         "def resolve_doc(t): return t\n")
+    import sys as _sys
+    _sys.modules.pop("retrieval", None)
     br = b.Bridge(root, root / "scripts")
     assert br.query({"query": "x", "collection": "nonsense"})["results"] == []
     out = br.query({"query": "F2", "collection": "engineering_standards_A360", "clause": "F2"})
-    assert out["results"] == [] and "AISC_360_22" in out["note"]
+    assert out["results"] == [] and "unknown collection" in out["note"] and "IS800" in out["note"]   # a US collection is not an IS one
+    out = br.query({"query": "7.1.2", "collection": "engineering_standards_IS800", "clause": "7.1.2"})
+    assert out["results"] == [] and "IS_800_2007" in out["note"] and "not in the corpus" in out["note"]  # known stem, not converted here
     out = br.query({"query": "eigen", "collection": "opensees_documentation"})
-    assert out["results"] == [] and "missing" in out["note"]
+    assert out["results"] == [] and "not part of the India corpus" in out["note"]
+    (root / "search").mkdir(); (root / "search" / "spec_fts.sqlite").write_bytes(b"")
+    out = br.query({"query": "SDS site class D", "collection": "engineering_standards_IS1893"})
+    assert out["results"] == [] and "US term 'SDS'" in out["note"] and "Z, I, Sa/g" in out["note"]   # the corpus's own trap, relayed
     assert (root / "queue" / "agent_queries.jsonl").exists()
-    # a stem the corpus holds under a name the fixed table does not know is still a valid collection
+    # a stem the corpus holds under a name the fixed table does not know is still a valid collection, and
+    # steltic_india's `stem` / `doc` keys name it directly
     (root / "scripts" / "retrieval.py").write_text(
         "class Corpus:\n"
-        "    def __init__(self, root): self.doc_meta = {'IS_875_3': {}, 'ASCE_7_22': {}}\n"
+        "    def __init__(self, root): self.doc_meta = {'IS_875_3': {}, 'IS_456_2000': {}}\n"
         "    def search(self, *a, **k): return {'found': False, 'hits': []}\n"
         "def resolve_doc(t): return t\n")
-    import sys as _sys
     _sys.modules.pop("retrieval", None)                 # the stub above is a different module now
     br = b.Bridge(root, root / "scripts")
-    for name in ("engineering_standards_IS_875_3", "ASCE_7_22"):
+    for name in ("engineering_standards_IS_875_3", "IS_456_2000"):
         out = br.query({"query": "wind", "collection": name})
         assert "unknown collection" not in (out.get("note") or ""), name
+    out = br.query({"query": "wind", "collection": "engineering_standards_IS456", "stem": "IS_456_2000", "doc": "IS_456_2000"})
+    assert "unknown collection" not in (out.get("note") or "")
     assert "unknown collection" in br.query({"query": "x", "collection": "engineering_standards_NOPE"})["note"]
 
 
 def test_design_modules_ground_through_the_query_file_manager_server():
     cat = load_catalog(config.CATALOG_DIR)
-    for mid in ("steltic", "steltic_cfs"):
+    for mid in ("steltic_india", "steltic_CFS_india"):
         m = cat[mid]
-        assert m.server.get("requires") == ["steltic_grokbot"]
-        assert m.env_vars["RAG_API_URL"] == "{server.steltic_grokbot}/query"
-    q = cat["steltic_grokbot"]
-    assert q.name == "Query file manager" and q.has_server
-    assert (config.CATALOG_DIR / "steltic_grokbot" / "rag_server.py").exists()
+        assert m.server.get("requires") == ["engineering_rag_india"]
+        assert m.env_vars["RAG_API_URL"] == "{server.engineering_rag_india}/query"
+    q = cat["engineering_rag_india"]
+    assert q.name == "IS corpus (Query file manager)" and q.has_server
+    assert (config.CATALOG_DIR / "engineering_rag_india" / "rag_server.py").exists()
     assert any(t.kind == "embed" for t in q.tabs)
 
 
@@ -726,10 +743,10 @@ def test_server_dependencies_resolve_or_drop_the_variable():
     from steltic_hub.registry import Registry
     from steltic_hub.runners import ServerSupervisor
     sup = ServerSupervisor(Registry())
-    assert sup.requires("steltic") == ["steltic_grokbot"]
-    assert sup.requires("steltic_grokbot") == []
-    env_tpl = load_catalog(config.CATALOG_DIR)["steltic"].env_vars
-    ctx = {"data_dir": "/d", "server.steltic_grokbot": "http://127.0.0.1:8411"}
+    assert sup.requires("steltic_india") == ["engineering_rag_india"]
+    assert sup.requires("engineering_rag_india") == []
+    env_tpl = load_catalog(config.CATALOG_DIR)["steltic_india"].env_vars
+    ctx = {"data_dir": "/d", "server.engineering_rag_india": "http://127.0.0.1:8411"}
     assert runners.expand(env_tpl, ctx)["RAG_API_URL"] == "http://127.0.0.1:8411/query"
     unresolved = runners.expand(env_tpl, {"data_dir": "/d"})["RAG_API_URL"]
     assert "{server." in unresolved                      # -> skipped by ServerSupervisor
@@ -740,12 +757,12 @@ def test_modules_can_be_renamed_by_the_user():
     from steltic_hub.registry import Registry
     reg = Registry()
     try:
-        assert reg.name("steltic_grokbot") == "Query file manager"
-        assert reg.rename("steltic_grokbot", "  QFM  ") == "QFM"
-        assert Registry().name("steltic_grokbot") == "QFM"           # persisted in state.json
-        assert reg.rename("steltic_grokbot", "") == "Query file manager"
+        assert reg.name("engineering_rag_india") == "IS corpus (Query file manager)"
+        assert reg.rename("engineering_rag_india", "  QFM  ") == "QFM"
+        assert Registry().name("engineering_rag_india") == "QFM"           # persisted in state.json
+        assert reg.rename("engineering_rag_india", "") == "IS corpus (Query file manager)"
     finally:
-        reg.rename("steltic_grokbot", "")
+        reg.rename("engineering_rag_india", "")
 
 
 def test_connection_is_kept_on_this_pc_and_forgettable():
@@ -773,8 +790,8 @@ def test_uploads_are_not_capped_and_names_come_from_the_registry():
         r = c.post("/api/jobs/UpTest/upload", files={"files": ("a b.json", b"{}" * 10, "application/json")})
         assert r.json()["files"][0]["name"] == "a_b.json"
         mods = {m["id"]: m for m in c.get("/api/state").json()["modules"]}
-        assert mods["steltic_grokbot"]["default_name"] == "Query file manager"
-        assert "servers_used" in mods["steltic"] and "steltic_grokbot" in mods["steltic"]["servers_used"]
+        assert mods["engineering_rag_india"]["default_name"] == "IS corpus (Query file manager)"
+        assert "servers_used" in mods["steltic_india"] and "engineering_rag_india" in mods["steltic_india"]["servers_used"]
         c.delete("/api/jobs/UpTest")
 
 
@@ -783,7 +800,7 @@ def test_native_crash_exit_codes_are_explained():
     the run gets one sentence saying what that is, and the converter gets its resume hint."""
     from steltic_hub import exitcodes
     from steltic_hub.registry import Registry
-    conv = next(t for t in Registry().manifest("steltic_grokbot").tabs if t.id == "convert")
+    conv = next(t for t in Registry().manifest("engineering_rag_india").tabs if t.id == "convert")
     assert "resumes from the last finished chunk" in conv.run.crash_hint      # the module's own next step, in its manifest
     t = exitcodes.explain(3221225477, conv.run.crash_hint)
     assert "0xC0000005" in t and "access violation" in t and "Pages per chunk" in t
@@ -921,7 +938,7 @@ def test_d_a_malformed_retry_block_is_refused(monkeypatch):
     with pytest.raises(ManifestError):     # only a cli run owns a process the hub could spawn again
         Run.parse({"kind": "http", "path": "/api/run", "retry": {"on": "native_crash", "max": 2}})
     # and the tab this was written for asks for it, with the smaller windows as the second retry's work-around
-    conv = next(t for t in Registry().manifest("steltic_grokbot").tabs if t.id == "convert")
+    conv = next(t for t in Registry().manifest("engineering_rag_india").tabs if t.id == "convert")
     assert conv.run.retry == {"on": "native_crash", "max": 3, "then_set": {"chunk_pages": 2}}
     assert any(f.id == "chunk_pages" and f.arg for f in conv.fields)
 
@@ -935,7 +952,7 @@ def test_state_says_which_tabs_are_missing_an_optional_component(monkeypatch):
     def convert_and_corpus():
         with TestClient(M.app) as c:
             mods = {m["id"]: m for m in c.get("/api/state").json()["modules"]}
-        tabs = {t["id"]: t for t in mods["steltic_grokbot"]["tabs"]}
+        tabs = {t["id"]: t for t in mods["engineering_rag_india"]["tabs"]}
         return tabs["convert"], tabs["corpus"]
     monkeypatch.setattr(envs, "optional_present", lambda m_, g: False)
     conv, corpus = convert_and_corpus()
@@ -948,7 +965,7 @@ def test_state_says_which_tabs_are_missing_an_optional_component(monkeypatch):
 # ---------------------------------------------------------------- 2026-09-18 review fixes
 def test_state_changing_requests_must_come_from_the_hubs_own_page():
     """A web page on any site can send a "simple" cross-site POST (text/plain body, or no body) to
-    127.0.0.1:8300 without a CORS preflight; the browser only hides the reply. Before this guard that
+    127.0.0.1:8301 without a CORS preflight; the browser only hides the reply. Before this guard that
     could rewrite the LLM connection to an attacker's endpoint, register a module from any git URL and
     install it (pip install -e . runs code), start runs and delete projects."""
     from fastapi.testclient import TestClient
@@ -964,7 +981,7 @@ def test_state_changing_requests_must_come_from_the_hubs_own_page():
     # DNS rebinding: a hostname the attacker points at 127.0.0.1
     assert c.get("/api/connection", headers={"host": "evil.example"}).status_code == 403
     # the hub's own page (the Edge --app window, the Tauri webview, a browser tab) is untouched
-    for origin in ("http://127.0.0.1:8300", "http://localhost:8300", "http://[::1]:8300"):
+    for origin in ("http://127.0.0.1:8301", "http://localhost:8301", "http://[::1]:8300"):
         assert c.post("/api/jobs/okproj", headers={"origin": origin}).status_code == 200
     assert c.post("/api/jobs/okproj2", headers={"sec-fetch-site": "same-origin"}).status_code == 200
     assert c.post("/api/jobs/okproj3").status_code == 200          # the launcher, curl, a module server: no Origin
@@ -1011,7 +1028,7 @@ def test_hub_url_is_a_template_for_module_servers():
     from steltic_hub import config, runners
     from steltic_hub.registry import Registry
     reg = Registry()
-    ctx = runners.base_ctx(reg.catalog["steltic"], "P", reg)
+    ctx = runners.base_ctx(reg.catalog["steltic_india"], "P", reg)
     assert ctx["hub_url"] == config.hub_url() and ctx["hub_url"].startswith("http://127.0.0.1:")
     assert runners.expand("{hub_url}/api/state", ctx) == ctx["hub_url"] + "/api/state"
 
@@ -1041,10 +1058,10 @@ def test_a_port_once_given_to_a_module_stays_its_own(monkeypatch, tmp_path):
     assert saved == {"steltic_variations": a, "steltic_admin": b, "steltic_probabilistic": c}
     # only when the window is exhausted does an idle module's port change hands -- and the map says so
     monkeypatch.setattr(config, "PORT_SPAN", 3)
-    d = sup2._alloc_port("steltic_grokbot")
+    d = sup2._alloc_port("engineering_rag_india")
     assert d in (a, b, c)
     saved = json.loads((tmp_path / "ports.json").read_text())
-    assert saved["steltic_grokbot"] == d and d not in [v for k, v in saved.items() if k != "steltic_grokbot"]
+    assert saved["engineering_rag_india"] == d and d not in [v for k, v in saved.items() if k != "engineering_rag_india"]
 
 
 def test_bundled_servers_never_let_the_browser_cache_a_stale_asset():
@@ -1101,12 +1118,12 @@ def test_cli_event_lines_are_relayed_as_events_and_the_rest_stays_log(monkeypatc
                       "print('starting')\n"
                       "print(json.dumps({'type': 'reasoning', 'text': 'thinking about drift'}))\n"
                       "print(json.dumps({'type': 'token', 'text': 'The storey-3 drift '}))\n"
-                      "print(json.dumps({'type': 'tool', 'name': 'search_engineering_standards', 'title': 'ASCE 7 16.4.1.2'}))\n"
+                      "print(json.dumps({'type': 'tool', 'name': 'search_engineering_standards', 'title': 'IS 1893 7.6.4'}))\n"
                       "print(json.dumps({'type': 'done', 'ok': True}))\n"
                       "print(json.dumps({'not': 'an event'}))\n"
                       "print('KEY=' + os.environ.get('STELTIC_LLM_API_KEY', '(unset)') + ' MODEL=' + os.environ.get('STELTIC_LLM_MODEL', '(unset)'))\n"
                       "print('RAG=' + os.environ.get('RAG_API_URL', '(unset)'))\n", encoding="utf-8")
-    m = _retry_module(script, llm=True, env={"RAG_API_URL": "{server.steltic_grokbot}/query"})
+    m = _retry_module(script, llm=True, env={"RAG_API_URL": "{server.engineering_rag_india}/query"})
     raw = _drive_run(monkeypatch, tmp_path, m)
     assert [e["type"] for e in _events(raw)][:6] == ["start", "log", "reasoning", "token", "tool", "log"]
     assert _events(raw, "reasoning")[0]["text"] == "thinking about drift"
@@ -1126,7 +1143,7 @@ def test_a_cli_run_marked_llm_gets_the_connection_and_the_servers_it_names(monke
     script = tmp_path / "env.py"
     script.write_text("import os\nfor k in ('STELTIC_LLM_BASE_URL', 'STELTIC_LLM_API_KEY', 'STELTIC_LLM_MODEL', 'RAG_API_URL'):\n"
                       "    print(k + '=' + os.environ.get(k, '(unset)'))\n", encoding="utf-8")
-    m = _retry_module(script, llm=True, env={"RAG_API_URL": "{server.steltic_grokbot}/query"})
+    m = _retry_module(script, llm=True, env={"RAG_API_URL": "{server.engineering_rag_india}/query"})
     class Reg:
         def is_installed(self, mid): return True
         def name(self, mid): return mid
@@ -1146,7 +1163,7 @@ def test_a_cli_run_marked_llm_gets_the_connection_and_the_servers_it_names(monke
     logs = [e["text"] for e in _events(asyncio.run(collect()), "log")]
     assert "STELTIC_LLM_BASE_URL=https://llm.example/v1" in logs and "STELTIC_LLM_API_KEY=sk-secret" in logs
     assert "STELTIC_LLM_MODEL=m-1" in logs and "RAG_API_URL=http://127.0.0.1:8419/query" in logs
-    assert runners.servers_referenced(m, m.tabs[0]) == ["steltic_grokbot"]
+    assert runners.servers_referenced(m, m.tabs[0]) == ["engineering_rag_india"]
 
 
 def test_run_llm_is_declared_only_where_it_means_something():
@@ -1159,12 +1176,11 @@ def test_run_llm_is_declared_only_where_it_means_something():
         Manifest.parse(base, "t")
     base["tabs"][0]["run"] = {"kind": "cli", "command": ["-m", "x"], "llm": True}
     assert Manifest.parse(base, "t").to_json()["tabs"][0]["run"]["llm"] is True
-    # the catalog: the Nonlinear module's Review tab is the one that uses it, and it names the standards server
+    # the catalog: no India CLI tab talks to the model (steltic_nonlinear_india 0.2 has no `snl review`; the design
+    # agents are HTTP servers with their own credentials endpoint), so no bundled tab declares run.llm
     cat = load_catalog(config.CATALOG_DIR)
-    review = next(t for t in cat["steltic_nonlinear"].tabs if t.id == "review")
-    assert review.run.llm is True and review.run.env["RAG_API_URL"] == "{server.steltic_grokbot}/query"
-    assert runners.servers_referenced(cat["steltic_nonlinear"], review) == ["steltic_grokbot"]
-    assert [t.id for t in cat["steltic_nonlinear"].tabs if t.run and t.run.llm] == ["review"]
+    assert [t.id for m in cat.values() for t in m.tabs if t.run and t.run.llm] == []
+    assert all(t.id != "review" for t in cat["steltic_nonlinear_india"].tabs)
 
 
 def test_run_continues_names_the_tab_a_resume_picks_up():
@@ -1188,7 +1204,7 @@ def test_run_continues_names_the_tab_a_resume_picks_up():
     assert j[1]["run"]["continues"] == "design" and j[0]["run"]["continues"] is None
     # the catalog: HR Steel's and CFS's Continue tabs resume their Design tabs
     cat = load_catalog(config.CATALOG_DIR)
-    for mid in ("steltic", "steltic_cfs"):
+    for mid in ("steltic_india", "steltic_CFS_india"):
         cont = next(t for t in cat[mid].tabs if t.id == "continue")
         assert cont.run.continues == "design" and cont.run.body.get("resume") is True
         assert [t.id for t in cat[mid].tabs if t.run and t.run.continues] == ["continue"]

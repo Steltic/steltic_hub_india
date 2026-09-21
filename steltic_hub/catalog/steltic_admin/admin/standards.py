@@ -19,11 +19,11 @@ import pathlib, re
 # (regex over the lower-cased file name, canonical stem, label)
 STEMS = [
     (r"is[\s_\-]*800\b|is800|general construction in steel", "IS_800_2007", "IS 800:2007"),
-    (r"is[\s_\-]*875[\s_\-]*(part[\s_\-]*)?1\b|is875[\s_\-]*p?1\b|dead loads", "IS_875_Part_1_2026", "IS 875 (Part 1) dead loads"),
-    (r"is[\s_\-]*875[\s_\-]*(part[\s_\-]*)?2\b|is875[\s_\-]*p?2\b|imposed loads", "IS_875_Part_2_1987", "IS 875 (Part 2):1987 imposed loads"),
-    (r"is[\s_\-]*875[\s_\-]*(part[\s_\-]*)?3\b|is875[\s_\-]*p?3\b|wind loads", "IS_875_Part_3_2015", "IS 875 (Part 3):2015 wind loads"),
-    (r"is[\s_\-]*875[\s_\-]*(part[\s_\-]*)?4\b|is875[\s_\-]*p?4\b|snow loads", "IS_875_Part_4_1987", "IS 875 (Part 4):2021 snow loads (stem keeps its historical name)"),
-    (r"is[\s_\-]*875[\s_\-]*(part[\s_\-]*)?5\b|is875[\s_\-]*p?5\b|special loads|load combinations", "IS_875_Part_5_1987", "IS 875 (Part 5):1987 special loads and combinations"),
+    (r"is[\s_\-]*875[\s_\-]*(part[\s_\-]*)?1(?!\d)|is875[\s_\-]*p?1(?!\d)|dead loads", "IS_875_Part_1_2026", "IS 875 (Part 1) dead loads"),
+    (r"is[\s_\-]*875[\s_\-]*(part[\s_\-]*)?2(?!\d)|is875[\s_\-]*p?2(?!\d)|imposed loads", "IS_875_Part_2_1987", "IS 875 (Part 2):1987 imposed loads"),
+    (r"is[\s_\-]*875[\s_\-]*(part[\s_\-]*)?3(?!\d)|is875[\s_\-]*p?3(?!\d)|wind loads", "IS_875_Part_3_2015", "IS 875 (Part 3):2015 wind loads"),
+    (r"is[\s_\-]*875[\s_\-]*(part[\s_\-]*)?4(?!\d)|is875[\s_\-]*p?4(?!\d)|snow loads", "IS_875_Part_4_1987", "IS 875 (Part 4):2021 snow loads (stem keeps its historical name)"),
+    (r"is[\s_\-]*875[\s_\-]*(part[\s_\-]*)?5(?!\d)|is875[\s_\-]*p?5(?!\d)|special loads|load combinations", "IS_875_Part_5_1987", "IS 875 (Part 5):1987 special loads and combinations"),
     (r"is[\s_\-]*1893|is1893|earthquake resistant design of structures|criteria for earthquake", "IS_1893_Part_1_2016", "IS 1893 (Part 1):2016 + Amd 1/2"),
     (r"is[\s_\-]*18168|is18168|earthquake resistant design and detailing of steel", "IS_18168_2023", "IS 18168:2023"),
     (r"is[\s_\-]*801\b|is801|cold[\s_\-]*formed light gauge", "IS_801_1975", "IS 801:1975"),

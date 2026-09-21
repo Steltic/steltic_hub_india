@@ -50,7 +50,7 @@ def parse_sse(lines: Iterator[str]) -> Iterator[dict | None]:
 
 class HubClient:
     def __init__(self, base_url: str):
-        self.base = (base_url or "http://127.0.0.1:8300").rstrip("/")
+        self.base = (base_url or "http://127.0.0.1:8301").rstrip("/")
 
     # ---------------- reads
     def _get(self, path: str, timeout: float = 30.0) -> dict:

@@ -2,8 +2,8 @@
 
 WHY ONE VENV PER MODULE (this is not a preference, it is forced):
 
-  steltic      installs top-level packages: steltic, steel_engine, contract, frontend, test_buildings
-  steltic_cfs  installs top-level packages: steltic, steel_engine, contract, frontend, test_buildings
+  steltic_india      installs top-level packages: steltic, steel_engine, contract, frontend, test_buildings
+  steltic_CFS_india  installs top-level packages: steltic, steel_engine, contract, frontend, test_buildings
 
 Same names, different code (verified: main.py, config.py, agent.py and steel_engine/pipeline.py
 all differ). Installed into one environment the second overwrites the first and you get a CFS
