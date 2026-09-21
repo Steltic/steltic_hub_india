@@ -85,19 +85,19 @@ function render() {
 function aboutBox() {
   return el('div', { class: 'about' },
     el('h4', {}, 'What this module does — and why it is unusual'),
-    el('p', {}, 'A design is checked on a ', el('b', {}, 'nominal'), ' building: plumb columns, handbook section properties, E = 29,000 ksi. The building that gets built is never that one. ',
-      'Researchers in the Direct Design Method tradition (Rasmussen and co-workers in Australia, the SSRC / AISC advanced-analysis groups in the USA) study this with Monte Carlo simulation: ',
+    el('p', {}, 'A design is checked on a ', el('b', {}, 'nominal'), ' building: plumb columns, IS 808 handbook section properties, E = 2.0 × 10⁵ MPa. The building that gets built is never that one. ',
+      'Researchers in the Direct Design Method tradition (Rasmussen and co-workers in Australia, the advanced-analysis groups elsewhere) study this with Monte Carlo simulation: ',
       'the statistical distributions of material, geometry and imperfection variables collected over decades in the literature are sampled to create many slightly different ',
       '“as-built” versions of one structure, normally to find the distribution of its ', el('b', {}, 'system capacity'), ' for reliability calibration.'),
-    el('p', {}, 'This module applies that idea to ', el('b', {}, 'standard LRFD design practice'), ' instead. It samples the as-built variables that change the elastic demands — ',
-      'modulus of elasticity, plate thickness per section group, a story-by-story out-of-plumb profile (and optionally the dead load) — builds each realisation in the design’s own ',
-      'HR Steel analysis model, runs every ASCE 7-22 load combination with P-Δ and the ELF forces from that realisation’s own period, and then checks the resulting demands against the ',
-      el('b', {}, 'design’s own AISC 360 capacities'), ', which are never recomputed. The question it answers: ',
+    el('p', {}, 'This module applies that idea to ', el('b', {}, 'standard IS 800:2007 limit state design'), ' instead. It samples the as-built variables that change the elastic demands — ',
+      'modulus of elasticity, plate thickness per section group, a storey-by-storey out-of-plumb profile (and optionally the dead load) — builds each realisation in the design’s own ',
+      'HR Steel (IS 800) analysis model, runs every IS 800 Table 4 / IS 875 Part 5 combination of the package’s load_plan with P-Δ and the IS 1893 forces from that realisation’s own period, and then checks the resulting demands against the ',
+      el('b', {}, 'design’s own IS 800 design strengths'), ' (Pd, Td, Md, Vd), which are never recomputed. The distributions are published survey statistics — information on the scatter of real steel and real erection, not a design basis. The question it answers: ',
       el('b', {}, 'if this building is built with real-world imperfections, does it still satisfy the design code it was designed to?')),
-    el('p', {}, 'Because AISC 360 is a member-by-member check there is no single capacity factor to plot; the output is the ', el('b', {}, 'maximum demand-to-capacity ratio in the building'),
+    el('p', {}, 'Because IS 800 is a member-by-member check there is no single capacity factor to plot; the output is the ', el('b', {}, 'maximum demand-to-capacity ratio in the building'),
       ' — one distribution for members, one for connections — with the design’s own value marked, its statistical parameters, where the governing check moves to, and which ',
-      'section groups cross 1.0 in some realisations. The ratio is ', el('b', {}, 'D/Rₙ: the factored demand over the nominal capacity'),
-      ' — the resistance factor φ is taken out of the design’s φRₙ, so 1.0 means the demand reaches the nominal strength (the design’s LRFD ratio D/φRₙ is one click away). ',
+      'section groups cross 1.0 in some realisations. The ratio is ', el('b', {}, 'D/Rₙ: the factored demand over the nominal strength'),
+      ' — the partial safety factor γm (IS 800 Table 5) is taken out of the design’s Rd = Rₙ/γm, so 1.0 means the demand reaches the nominal strength (the design’s own IS 800 ratio D/Rd is one click away). ',
       'A ratio above 1.0 here is ', el('b', {}, 'not a code requirement to do anything'),
       ' — the code is satisfied on the nominal model — it is a place to take a second look.'),
     el('p', {}, 'Not varied, on purpose: ', S.lib.not_varied.map(([k, why], i) => el('span', {}, i ? '; ' : '', el('b', {}, k), ' — ', why)), '.'));
@@ -144,9 +144,9 @@ function paneModel(main) {
     const mrows = d.members.map(m => el('tr', {}, el('td', {}, m.id), el('td', {}, m.limit_state || ''), el('td', { class: 'num' }, fmt.n(m.DC))));
     pane.append(el('div', { class: 'card' },
       el('div', { class: 'stats' },
-        tile('building', pr.name, `${pr.members} members · ${pr.stories} stories · ${pr.NX}×${pr.NY} bays`),
-        tile('system', (pr.system || '?').split(',')[0], pr.risk_category ? `Risk Category ${pr.risk_category}` : ''),
-        tile('load combinations', pr.n_combos, 'ASCE 7-22 LRFD, P-Δ'),
+        tile('building', pr.name, `${pr.members} members · ${pr.stories} storeys · ${pr.NX}×${pr.NY} bays`),
+        tile('system', (pr.system || '?').split(',')[0], pr.seismic && pr.seismic.zone ? `IS 1893 Zone ${pr.seismic.zone} · Z ${pr.seismic.Z} · I ${pr.seismic.I} · R ${pr.seismic.R} · soil ${pr.seismic.soil || '?'}` : (pr.steel_grade || '')),
+        tile('load combinations', pr.n_combos, 'IS 800 Table 4 / IS 875-5, P-Δ' + (pr.design_status ? ` · design_status ${String(pr.design_status).toUpperCase()}` : '')),
         tile('checked groups', `${d.n_members_dc} / ${d.members.length}`, `${d.n_connections_dc} connections with D/C`),
         tile('section groups', pr.groups.length, pr.groups.slice(0, 4).map(g => g.section).join(', ') + (pr.groups.length > 4 ? '…' : ''))),
       el('h3', {}, 'The design’s own checks (from calc_package.json)'),
@@ -197,7 +197,7 @@ function paneRun(main) {
   const bar = el('div', { class: 'bar' }, el('i', { style: `width:${total ? 100 * done / total : 0}%` }));
   const eta = prog && prog.eta_seconds ? `≈ ${fmt.dur(prog.eta_seconds)} left (${fmt.dur(prog.mean_seconds)} per realisation on ${prog.workers} workers)` : '';
   main.append(el('div', { class: 'pane' }, el('h2', {}, 'Run'),
-    el('p', { class: 'lead' }, 'Each realisation is one full LRFD analysis of the as-built model (all combinations, P-Δ, its own period and ELF forces) — a few seconds each on this size of building. Realisation 0 is the nominal design model; the workers run in the background and the study survives closing this tab.'),
+    el('p', { class: 'lead' }, 'Each realisation is one full IS 800 limit-state analysis of the as-built model (all load_plan combinations, P-Δ, its own period and IS 1893 forces scaled to VB) — a few seconds each on this size of building. Realisation 0 is the nominal design model; the workers run in the background and the study survives closing this tab.'),
     el('div', { class: 'card' },
       el('div', { class: 'row' }, el('label', { class: 'f', style: 'margin:0' }, 'Number of variations'), nIn,
         el('label', { class: 'f', style: 'margin:0 0 0 14px' }, 'Seed'), seedIn, el('label', { class: 'f', style: 'margin:0 0 0 14px' }, 'Workers'), wIn,
@@ -218,7 +218,7 @@ function attachEvents() {
     if (ev.type === 'finished') { es.close(); S.es = null; if (!ev.idle) { S.log.push({ k: ev.stopped ? 'err' : 'ok', t: ev.stopped ? 'study stopped' : 'study finished' }); await refresh(); if (S.step === 2) render(); else paintLog(); } return; }
     if (ev.type === 'start') S.log.push({ k: 'l', t: `▶ realisation ${ev.id}${ev.nominal ? ' (the design model)' : ''} on worker ${ev.worker}` });
     else if (ev.type === 'done') {
-      S.log.push({ k: ev.ok ? 'ok' : 'err', t: ev.ok ? `■ ${ev.id} done in ${fmt.dur(ev.seconds)} — T₁ ${fmt.n(ev.T1)} s, V ${fmt.n(ev.V_kip, 0)} kip` : `■ ${ev.id} failed: ${ev.error}` });
+      S.log.push({ k: ev.ok ? 'ok' : 'err', t: ev.ok ? `■ ${ev.id} done in ${fmt.dur(ev.seconds)} — T₁ ${fmt.n(ev.T1)} s, VB ${fmt.n(ev.VB_kN, 0)} kN` : `■ ${ev.id} failed: ${ev.error}` });
       if (ev.progress && S.proj) { S.proj.progress = ev.progress; const b = $('.bar i'); if (b) b.style.width = `${100 * ev.progress.done / ev.progress.total}%`; }
       if (ev.id === 0 || (ev.progress && ev.progress.done % 10 === 0)) { await refresh(); if (S.step === 2) { render(); return; } }
     } else S.log.push({ k: 'l', t: ev.text || '' });
@@ -261,12 +261,12 @@ async function paneResults(main) {
   const setBasis = async (basis) => { try { await api(`/api/project/${enc(S.project)}/basis`, { method: 'POST', body: { basis } }); render(); } catch (e) { toast(e.message, 'bad'); } };
   const basisBox = el('div', { class: 'card tight' },
     el('div', { class: 'row' }, el('b', { style: 'font-size:12px;color:var(--dim)' }, 'CAPACITY BASIS'),
-      el('label', { class: 'rule', style: 'padding:0' }, el('input', { type: 'radio', name: 'basis', checked: nominal, onchange: () => setBasis('nominal') }), el('span', {}, 'D/Rₙ — factored demand over nominal capacity (φ removed)')),
-      el('label', { class: 'rule', style: 'padding:0' }, el('input', { type: 'radio', name: 'basis', checked: !nominal, onchange: () => setBasis('design') }), el('span', {}, 'D/φRₙ — the design’s own LRFD ratio'))),
+      el('label', { class: 'rule', style: 'padding:0' }, el('input', { type: 'radio', name: 'basis', checked: nominal, onchange: () => setBasis('nominal') }), el('span', {}, 'D/Rₙ — factored demand over nominal strength (γm taken out)')),
+      el('label', { class: 'rule', style: 'padding:0' }, el('input', { type: 'radio', name: 'basis', checked: !nominal, onchange: () => setBasis('design') }), el('span', {}, 'D/Rd — the design’s own IS 800 ratio (Rd = Rₙ/γm)'))),
     el('p', { class: 'hint', style: 'margin:6px 0 0' }, nominal
-      ? `The design's package records φRₙ and D/φRₙ; the φ is taken out here (Rₙ = φRₙ / φ) so that 1.0 means the factored demand reaches the nominal strength, not that the LRFD check is exactly met. The design's own maximum LRFD ratio: ${fmt.n(b.member_max_recorded)} (members), ${fmt.n(b.connection_max_recorded)} (connections). φ assumed: ` +
+      ? `The design's package records the IS 800 design strengths Rd = Rₙ/γm and D/Rd; the partial safety factor is taken out here (Rₙ = γm Rd) so that 1.0 means the factored demand reaches the nominal strength, not that the IS 800 check is exactly met. The design's own maximum IS 800 ratio: ${fmt.n(b.member_max_recorded)} (members), ${fmt.n(b.connection_max_recorded)} (connections). γm assumed (IS 800 Table 5): ` +
         (a.phi_notes || []).map(([w, v]) => `${v.toFixed(2)} for ${w}`).join('; ') + '.'
-      : 'Ratios are the design’s LRFD ratios D/φRₙ, recomputed for each realisation with the recorded φRₙ.'));
+      : 'Ratios are the design’s own IS 800 ratios D/Rd, recomputed for each realisation with the recorded design strengths.'));
   const statRows = (st) => [['realisations', st.n], ['design value', fmt.n(st.base)], ['mean', fmt.n(st.mean)], ['std / COV', `${fmt.n(st.std)} / ${(100 * st.cov).toFixed(1)}%`],
     ['median', fmt.n(st.median)], ['min / max', `${fmt.n(st.min)} / ${fmt.n(st.max)}`], ['5th / 95th pct', `${fmt.n(st.p5)} / ${fmt.n(st.p95)}`], ['skewness', fmt.n(st.skewness)],
     ['P(> 1.0)', `${fmt.pct(st.p_over_limit)}${st.p_over_limit_lognormal !== undefined ? ` (lognormal ${(100 * st.p_over_limit_lognormal).toFixed(2)}%)` : ''}`], ['P(> design)', fmt.pct(st.p_over_base)],
@@ -295,16 +295,16 @@ async function paneResults(main) {
       el('div', { class: 'grow' }, el('table', {}, el('thead', {}, el('tr', {}, el('th', {}, 'Governing combination'), el('th', { class: 'num' }, 'runs'), el('th', { class: 'num' }, 'share'))),
         el('tbody', {}, ...g.combos.map(([cb, c]) => el('tr', {}, el('td', {}, el('code', {}, cb)), el('td', { class: 'num' }, c), el('td', { class: 'num' }, fmt.pct(c / a.n_done))))))))));
   // groups: where to look
-  const gcols = [['id', 'Group'], ['limit_state', 'Check'], ['dc_recorded', 'LRFD D/φRₙ', 'num'], ['dc_base', `Design ${R}`, 'num'], ['mean', 'Mean', 'num'], ['p95', '95th pct', 'num'], ['max', 'Max', 'num'], ['p_over_1', 'Over 1.0 in', 'num'], ['governs_share', 'Governs in', 'num'], ['change_mean', 'Change', 'num'], ['method', 'Method']];
+  const gcols = [['id', 'Group'], ['limit_state', 'Check'], ['dc_recorded', 'IS 800 D/Rd', 'num'], ['dc_base', `Design ${R}`, 'num'], ['mean', 'Mean', 'num'], ['p95', '95th pct', 'num'], ['max', 'Max', 'num'], ['p_over_1', 'Over 1.0 in', 'num'], ['governs_share', 'Governs in', 'num'], ['change_mean', 'Change', 'num'], ['method', 'Method']];
   pane.append(el('div', { class: 'card' }, el('h3', { style: 'margin-top:0' }, 'Member groups — where to take a second look'),
-    el('p', { class: 'hint' }, `Click a header to sort. Highlighted rows cross ${R} = 1.0 in at least one realisation. “exact” = AISC 360 check recomputed with the capacities recorded in the package${nominal ? ' (each divided by its φ)' : ''}; “scaled” = the recorded ratio grown by the largest increase of its demand components (the package records no capacity for that term)${nominal ? ', with φ = 0.90 taken out (1.00 for a pure shear check)' : ''} — conservative.`),
+    el('p', { class: 'hint' }, `Click a header to sort. Highlighted rows cross ${R} = 1.0 in at least one realisation. “exact” = IS 800 check (8.2 / 8.4 / 7.1.2 / 9.3.1.3) recomputed with the design strengths recorded in the package${nominal ? ' (each multiplied by its γm)' : ''}, used only where it reproduces the recorded ratio; “scaled” = the recorded ratio grown by the largest increase of its demand components (the engine's 9.3.2.2 check with its amplification and LTB is not reproducible from the recorded strengths alone)${nominal ? ', with γm0 = 1.10 taken out (1.25 for a rupture-governed check)' : ''} — conservative.`),
     sortable(gcols, a.groups, S.gsort, s => { S.gsort = s; render(); }, r => el('tr', { class: r.p_over_1 > 0 ? 'top2' : '' },
       el('td', {}, r.id), el('td', {}, r.limit_state || ''), el('td', { class: 'num' }, fmt.n(r.dc_recorded)), el('td', { class: 'num' }, fmt.n(r.dc_base)), el('td', { class: 'num' }, fmt.n(r.mean)), el('td', { class: 'num' }, fmt.n(r.p95)),
       el('td', { class: 'num' }, fmt.n(r.max)), el('td', { class: 'num' }, fmt.pct(r.p_over_1)), el('td', { class: 'num' }, fmt.pct(r.governs_share)),
-      el('td', { class: 'num' }, r.change_mean === null ? '—' : `${(100 * r.change_mean).toFixed(1)}%`), el('td', {}, el('span', { class: 'pill ' + (r.method === 'exact' ? 'ok' : 'warn') }, r.method + (r.phi && nominal ? ` φ ${r.phi.toFixed(2)}` : '')))))));
+      el('td', { class: 'num' }, r.change_mean === null ? '—' : `${(100 * r.change_mean).toFixed(1)}%`), el('td', {}, el('span', { class: 'pill ' + (r.method === 'exact' ? 'ok' : 'warn') }, r.method + (r.phi && nominal ? ` γm ${r.phi.toFixed(2)}` : '')))))));
   if (a.conn_table && a.conn_table.length) {
     pane.append(el('div', { class: 'card' }, el('h3', { style: 'margin-top:0' }, 'Connections'),
-      el('div', { class: 'tablewrap' }, el('table', {}, el('thead', {}, el('tr', {}, el('th', {}, 'Connection'), el('th', {}, 'Type'), el('th', { class: 'num' }, 'LRFD D/φRₙ'), nominal ? el('th', { class: 'num' }, 'φ') : null, el('th', { class: 'num' }, `Design ${R}`), el('th', { class: 'num' }, 'Mean'), el('th', { class: 'num' }, 'Max'), el('th', { class: 'num' }, 'Over 1.0 in'), el('th', {}, 'Demand scaled by'))),
+      el('div', { class: 'tablewrap' }, el('table', {}, el('thead', {}, el('tr', {}, el('th', {}, 'Connection'), el('th', {}, 'Type'), el('th', { class: 'num' }, 'IS 800 D/Rd'), nominal ? el('th', { class: 'num' }, 'γm') : null, el('th', { class: 'num' }, `Design ${R}`), el('th', { class: 'num' }, 'Mean'), el('th', { class: 'num' }, 'Max'), el('th', { class: 'num' }, 'Over 1.0 in'), el('th', {}, 'Demand scaled by'))),
         el('tbody', {}, ...a.conn_table.map(r => el('tr', { class: r.p_over_1 > 0 ? 'top2' : '' }, el('td', {}, r.id), el('td', {}, r.type || ''), el('td', { class: 'num' }, fmt.n(r.dc_recorded)), nominal ? el('td', { class: 'num' }, fmt.n(r.phi, 2)) : null, el('td', { class: 'num' }, fmt.n(r.dc_base)), el('td', { class: 'num' }, fmt.n(r.mean)),
           el('td', { class: 'num' }, fmt.n(r.max)), el('td', { class: 'num' }, fmt.pct(r.p_over_1)), el('td', { class: 'hint' }, (r.mapped || []).map(([k, h]) => `${k} ← ${h}`).join(', ')))))))));
   }
@@ -313,15 +313,15 @@ async function paneResults(main) {
       el('table', {}, el('tbody', {}, ...a.correlations.map(c => el('tr', {}, el('td', {}, c.label), el('td', { class: 'num' }, `${c.rho >= 0 ? '+' : ''}${c.rho.toFixed(2)}`),
         el('td', {}, el('span', { class: 'rho', style: `width:${Math.abs(c.rho) * 160}px` }))))))));
   }
-  const rcols = [['id', '#', 'num'], ['member_max', `Max member ${R}`, 'num'], ['governing', 'Governing'], ['governing_combo', 'Combination'], ['n_over', 'Groups > 1', 'num'], ['connection_max', `Max conn. ${R}`, 'num'], ['drift_ratio', 'Drift / allow.', 'num'],
-    ['T1', 'T₁ (s)', 'num'], ['V_kip', 'V (kip)', 'num'], ['E_factor', 'E', 'num'], ['thk_mean', 'thk', 'num'], ['lean_top', 'lean', 'num'], ['dead', 'D', 'num']];
+  const rcols = [['id', '#', 'num'], ['member_max', `Max member ${R}`, 'num'], ['governing', 'Governing'], ['governing_combo', 'Combination'], ['n_over', 'Groups > 1', 'num'], ['connection_max', `Max conn. ${R}`, 'num'], ['drift_ratio', 'Drift / limit', 'num'],
+    ['T1', 'T₁ (s)', 'num'], ['VB_kN', 'VB (kN)', 'num'], ['E_factor', 'E', 'num'], ['thk_mean', 'thk', 'num'], ['lean_top', 'lean', 'num'], ['dead', 'D', 'num']];
   pane.append(el('div', { class: 'card' }, el('div', { class: 'row' }, el('h3', { style: 'margin:0' }, 'Realisations'), el('span', { class: 'sp' }),
       el('a', { href: `/api/project/${enc(S.project)}/file/report.html`, target: '_blank' }, 'report.html'), el('a', { href: `/api/project/${enc(S.project)}/file/results.csv` }, 'results.csv'),
       el('a', { href: `/api/project/${enc(S.project)}/file/summary.json` }, 'summary.json'), el('a', { href: `/api/project/${enc(S.project)}/file/realisations.json` }, 'realisations.json')),
     el('p', { class: 'hint' }, 'E, thk and D are factors on nominal; lean is the resultant top-of-building lean as 1/H. Files are written to this project’s probabilistic/ folder.'),
     sortable(rcols, a.rows, S.sort, s => { S.sort = s; render(); }, r => el('tr', { class: r.member_max > 1 ? 'top2' : '' },
       el('td', { class: 'num' }, r.id), el('td', { class: 'num' }, fmt.n(r.member_max)), el('td', {}, r.governing || ''), el('td', {}, el('code', {}, r.governing_combo || '')), el('td', { class: 'num' }, r.n_over),
-      el('td', { class: 'num' }, fmt.n(r.connection_max)), el('td', { class: 'num' }, fmt.n(r.drift_ratio)), el('td', { class: 'num' }, fmt.n(r.T1)), el('td', { class: 'num' }, fmt.n(r.V_kip, 0)),
+      el('td', { class: 'num' }, fmt.n(r.connection_max)), el('td', { class: 'num' }, fmt.n(r.drift_ratio)), el('td', { class: 'num' }, fmt.n(r.T1)), el('td', { class: 'num' }, fmt.n(r.VB_kN, 0)),
       el('td', { class: 'num' }, fmt.n(r.E_factor)), el('td', { class: 'num' }, fmt.n(r.thk_mean)), el('td', { class: 'num' }, r.lean_top ? `1/${Math.round(1 / r.lean_top)}` : '—'), el('td', { class: 'num' }, fmt.n(r.dead, 2))))));
   main.append(pane);
 }

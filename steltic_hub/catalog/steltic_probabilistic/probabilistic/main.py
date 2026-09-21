@@ -1,15 +1,16 @@
-"""Probabilistic analysis -- the module server.
+"""Probabilistic analysis -- the module server (India edition: HR Steel = steltic_india, IS 800).
 
 One project = one study of one design package. Everything lives in
-<PROB_JOBS>/<project>/probabilistic/: package/ (the unpacked HR Steel design), probe.json (model
+<PROB_JOBS>/<project>/probabilistic/: package/ (the unpacked HR Steel (IS 800) design), probe.json (model
 summary + combinations), realisations.json (the sampled inputs), results/r####.json (one per
 realisation, written by the workers), and the outputs (summary.json, results.csv, report.html,
 capacity_distribution.svg).
 
 The analyses run in worker processes under the Nonlinear module's interpreter (DDM_PYTHON):
 that environment holds openseespy, and the HR Steel engine is put on its path (STELTIC_ENGINE_DIR)
-so the design's own elastic LRFD model is what gets perturbed and re-analysed. This server only
-samples, schedules, watches, re-checks the demands against the design's capacities and summarises.
+so the design's own elastic IS 800 model is what gets perturbed and re-analysed. This server only
+samples, schedules, watches, re-checks the demands against the design's IS 800 design strengths and
+summarises (kN, mm; γm from IS 800 Table 5).
 """
 from __future__ import annotations
 import io, json, os, pathlib, re, shutil, subprocess, sys, threading, time, zipfile
@@ -277,7 +278,7 @@ class Study(threading.Thread):
                 self.status[i] = "done" if ok else "failed"
                 if ok and isinstance(ev.get("seconds"), (int, float)):
                     self.done_seconds.append(float(ev["seconds"]))
-                self.emit({"type": "done", "id": i, "worker": w, "ok": ok, "T1": ev.get("T1"), "V_kip": ev.get("V_kip"),
+                self.emit({"type": "done", "id": i, "worker": w, "ok": ok, "T1": ev.get("T1"), "VB_kN": ev.get("VB_kN"),
                            "seconds": ev.get("seconds"), "error": ev.get("error"), "progress": self.progress()})
             elif kind == "skip":
                 self.status[i] = "done"
@@ -387,7 +388,7 @@ def _payload(project: str) -> dict:
     base = next((r for r in results if r.get("id") == 0), None)
     p_small = None
     if probe:
-        p_small = {k: probe.get(k) for k in ("name", "members", "stories", "Fy_nominal", "risk_category", "system", "NX", "NY", "drift_limit")}
+        p_small = {k: probe.get(k) for k in ("name", "members", "stories", "Fy_nominal", "steel_grade", "units", "seismic", "design_status", "system", "NX", "NY", "drift_limit")}
         p_small["groups"] = probe.get("groups", [])
         p_small["n_combos"] = len(probe.get("combos", []))
         d = probe.get("design") or {}
@@ -397,7 +398,7 @@ def _payload(project: str) -> dict:
     return {"project": clean_name(project), "package": st.get("package"), "settings": st.get("settings"), "run": st.get("run"),
             "probe": p_small, "spec": ({"n": spec["n"], "seed": spec["seed"], "variables": spec.get("variables"), "options": spec.get("options")} if spec else None),
             "results": {"n_ok": n_ok, "n_failed": sum(1 for r in results if not r.get("ok")), "n_total": len(results),
-                        "base": ({"ok": base.get("ok"), "T1": base.get("T1"), "V_kip": base.get("V_kip"), "seconds": base.get("seconds"),
+                        "base": ({"ok": base.get("ok"), "T1": base.get("T1"), "VB_kN": base.get("VB_kN"), "seconds": base.get("seconds"),
                                   "error": base.get("error")} if base else None),
                         "status": {str(r["id"]): ("done" if r.get("ok") else "failed") for r in results}},
             "running": bool(s and not s.finished), "progress": (s.progress() if s else None), "toolchain": toolchain()}
@@ -624,7 +625,7 @@ async def results(project: str):
 
 @app.post("/api/project/{project}/basis")
 async def set_basis(project: str, request: Request):
-    """Which capacity the ratios use: 'nominal' (D/Rn, phi removed -- the default) or 'design' (D/phiRn)."""
+    """Which capacity the ratios use: 'nominal' (D/Rn, γm taken out -- the default) or 'design' (D/Rd, the IS 800 ratio)."""
     body = await request.json()
     basis = "design" if body.get("basis") == "design" else "nominal"
     update_state(project, lambda st: st["settings"].__setitem__("basis", basis))

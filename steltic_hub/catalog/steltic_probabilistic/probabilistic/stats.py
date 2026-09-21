@@ -10,71 +10,95 @@ PALETTE = {"bars": "#4a8de0", "lognormal": "#b8861f", "normal": "#9b6fe0", "base
 
 # ---------------------------------------------------------------- capacities as recorded by the design
 def _find_key(cap: dict, *patterns) -> float | None:
-    """A capacity value whose key matches one of the regex patterns (case-insensitive)."""
+    """A capacity value whose key matches one of the regex patterns (case-insensitive), searched one
+    level deep: steltic_india records {"compression": {"Pd_N": ...}, "Mdz_section": {"Md_Nmm": ...}, ...}."""
+    flat = {}
+    for k, v in (cap or {}).items():
+        if isinstance(v, dict):
+            for kk, vv in v.items():
+                flat[f"{k}.{kk}"] = vv
+        else:
+            flat[str(k)] = v
     for pat in patterns:
         rx = re.compile(pat, re.I)
-        for k, v in (cap or {}).items():
-            if rx.fullmatch(str(k).replace(" ", "")) and isinstance(v, (int, float)) and v > 0:
+        for k, v in flat.items():
+            if rx.fullmatch(str(k).replace(" ", "")) and isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0:
                 return float(v)
     return None
 
 
 def caps_of(member: dict) -> dict:
+    """The IS 800 DESIGN strengths the package recorded for a member group (N, N-mm): Pd (7.1.2),
+    Td (6.2), Mdz (8.2 -- the LTB-reduced value when recorded, else the section capacity), Mdy, Vd (8.4)."""
     cap = member.get("capacity") or {}
-    return {"Pc": _find_key(cap, r"phi_?pn(_kip)?", r"phi_?pc(_kip)?", r"phi_?p(_kip)?"),
-            "Pt": _find_key(cap, r"phi_?pt(_kip)?", r"phi_?tn(_kip)?"),
-            "Mcx": _find_key(cap, r"phi_?mnx?(_kipin)?", r"phi_?mcx?(_kipin)?", r"phi_?mp(x)?(_kipin)?"),
-            "Mcy": _find_key(cap, r"phi_?mny(_kipin)?", r"phi_?mcy(_kipin)?"),
-            "Vc": _find_key(cap, r"phi_?vn(_kip)?", r"phi_?vc(_kip)?")}
+    return {"Pc": _find_key(cap, r"compression\.Pd_N", r"Pd_N", r"compression\.Pd(y|z)_N"),
+            "Pt": _find_key(cap, r"tension\.Td_N", r"Td_N", r"tension\.Tdg_N"),
+            "Mcx": _find_key(cap, r"Mdz\.Md_Nmm", r"Mdz_ltb\.Md_Nmm", r"Mdz_section\.Md_Nmm", r"Mdz_Nmm"),
+            "Mcy": _find_key(cap, r"Mdy\.Md_Nmm", r"Mdy_section\.Md_Nmm", r"Mdy_Nmm"),
+            "Vc": _find_key(cap, r"shear_z\.Vd_N", r"Vd_N", r"shear\.Vd_N")}
 
 
 # ---------------------------------------------------------------- the two capacity bases
-# The design's package records phi*Rn and D/(phi*Rn). The study reports, by default, the FACTORED
-# demand over the NOMINAL capacity, D/Rn = phi * D/(phi*Rn): the resistance factor is taken out so
-# that 1.0 means "the demand reaches the nominal strength", not "the LRFD check is exactly met".
-# The phi values below are AISC 360-22's for the checks HR Steel's agent records; they are the
-# assumptions used to undo the factoring and are shown with every result.
-PHI_MEMBER = {"Pc": 0.90, "Pt": 0.90, "Mcx": 0.90, "Mcy": 0.90, "Vc": 1.00}     # E1/D2/F1: 0.90; G1 rolled I-shapes: 1.00
-PHI_NOTES = [("flexure, compression, tension yielding, interaction", 0.90, "AISC 360-22 F1, E1, D2, H1"),
-             ("shear, rolled I-shapes", 1.00, "AISC 360-22 G2.1(a)"),
-             ("bolts, welds, block shear, rupture, bearing, anchorage", 0.75, "AISC 360-22 J3, J2, J4"),
-             ("panel zone, plate yielding, CJP developing the member, base plate bending", 0.90, "AISC 360-22 J10.6, J4.1, J1.4, J8"),
-             ("concrete bearing under a base plate or shear lug", 0.65, "AISC 360-22 J8")]
-BASES = {"nominal": "D/Rₙ — factored demand over NOMINAL capacity (φ removed)",
-         "design": "D/φRₙ — the design's own LRFD ratio"}
-_CONN_065 = re.compile(r"concrete bearing|shear lug|\bj8\b", re.I)
-_CONN_075 = re.compile(r"bolt|weld|block shear|rupture|bearing|anchor|net section|fillet|shear tab|single-plate", re.I)
-_CONN_090 = re.compile(r"panel|yield|cjp|base plate|plate bending|develops", re.I)
+# The design's package records the DESIGN strengths Rd = Rn / γm and the ratios D/Rd (IS 800:2007
+# Table 5 partial safety factors for resistance). The study reports, by default, the FACTORED demand
+# over the NOMINAL strength, D/Rn = (D/Rd) / γm: the partial factor is taken out so that 1.0 means
+# "the demand reaches the nominal strength", not "the IS 800 check is exactly met". The γm values
+# below are IS 800 Table 5's for the checks HR Steel's engine records; they are the assumptions used
+# to undo the factoring and are shown with every result.
+GAMMA_MEMBER = {"Pc": 1.10, "Pt": 1.10, "Mcx": 1.10, "Mcy": 1.10, "Vc": 1.10}     # γm0 = 1.10: yielding, buckling, shear
+GAMMA_NOTES = [("member yielding, buckling, bending, shear, interaction (γm0)", 1.10, "IS 800:2007 Table 5 / 5.4.1"),
+               ("net-section rupture, block shear (γm1)", 1.25, "IS 800:2007 Table 5, 6.3, 6.4"),
+               ("bolts -- bearing type, friction grip (γmb, γmf)", 1.25, "IS 800:2007 Table 5, 10.3, 10.4"),
+               ("welds, shop (γmw)", 1.25, "IS 800:2007 Table 5, 10.5"),
+               ("welds, site (γmw)", 1.50, "IS 800:2007 Table 5, 10.5"),
+               ("panel zone, plate yielding, base plate bending (γm0)", 1.10, "IS 800:2007 Table 5, 12.11.2.3, 8.2")]
+PHI_NOTES = GAMMA_NOTES          # the name the UI reads; the values are γm, not φ
+BASES = {"nominal": "D/Rₙ — factored demand over NOMINAL strength (γm taken out)",
+         "design": "D/Rd — the design's own IS 800 ratio (Rd = Rₙ / γm)"}
+_CONN_150 = re.compile(r"site weld|field weld|welded on site", re.I)
+_CONN_125 = re.compile(r"bolt|weld|block shear|rupture|bearing|anchor|net section|fillet|fin plate|shear tab|single-plate|10\.3|10\.4|10\.5|6\.3|6\.4", re.I)
+_CONN_110 = re.compile(r"panel|yield|cjp|complete penetration|base plate|plate bending|develops|8\.2|8\.4|12\.11", re.I)
 
 
-def phi_member(limit_state: str | None) -> float:
-    """phi behind a recorded member D/C (used only for groups whose capacities are not all recorded)."""
+def gamma_member(limit_state: str | None) -> float:
+    """γm behind a recorded member D/C (used only for groups whose capacities are not all recorded):
+    γm0 = 1.10 for every IS 800 Section 7-9 member check; γm1 = 1.25 only for a rupture-governed one."""
     t = (limit_state or "").lower()
-    if "shear" in t and not any(w in t for w in ("flex", "bend", "moment", "interaction", "compress", "h1", "f2", "f3", "e3")):
-        return 1.00
-    return 0.90
+    if ("rupture" in t or "net section" in t or "6.3.1" in t) and not any(w in t for w in ("7.1", "8.2", "9.3", "interaction", "buckl")):
+        return 1.25
+    return 1.10
 
 
-def phi_connection(limit_state: str | None, ctype: str | None) -> float:
+def gamma_connection(limit_state: str | None, ctype: str | None) -> float:
     t = f"{limit_state or ''} {ctype or ''}"
-    if _CONN_065.search(t):
-        return 0.65
-    if _CONN_075.search(t):
-        return 0.75
-    if _CONN_090.search(t):
-        return 0.90
-    return 0.75
+    if _CONN_150.search(t):
+        return 1.50
+    if _CONN_125.search(t):
+        return 1.25
+    if _CONN_110.search(t):
+        return 1.10
+    return 1.25
+
+
+# kept under the old names so the server and the tests read one vocabulary: "phi" means γm here
+phi_member = gamma_member
+phi_connection = gamma_connection
+PHI_MEMBER = GAMMA_MEMBER
 
 
 def caps_basis(c: dict, basis: str) -> dict:
-    """The capacities in the chosen basis: as recorded (phi*Rn) or nominal (Rn = phi*Rn / phi)."""
+    """The capacities in the chosen basis: as recorded (Rd = Rn / γm) or nominal (Rn = γm Rd)."""
     if basis != "nominal":
         return c
-    return {k: (v / PHI_MEMBER[k] if v else v) for k, v in c.items()}
+    return {k: (v * GAMMA_MEMBER[k] if v else v) for k, v in c.items()}
 
 
 def dc_exact(kind: str, d: dict, c: dict) -> float | None:
-    """AISC 360 check with the given capacities; None when a needed capacity is not recorded."""
+    """IS 800 check with the given design strengths; None when a needed strength is not recorded.
+    Beam: the larger of Mz/Mdz, My/Mdy, V/Vd (8.2, 8.4). Brace: P/Pd or T/Td (7.1.2, 6.2). Column:
+    the 9.3.1.3 linear interaction P/Pd + Mz/Mdz + My/Mdy (the conservative alternative to 9.3.1.1;
+    the 9.3.2.2 overall-member check with its amplification is what the engine recorded, so this
+    formula is used only where it reproduces the recorded ratio -- see member_dcs)."""
     comp, tens, Mz, My, V = (float(d.get(q) or 0.0) for q in ("comp", "tens", "Mz", "My", "V"))
     ref = max(comp, tens, Mz, My, V, 1e-9)
     comp, tens, Mz, My, V = (0.0 if abs(q) < 1e-6 * ref else q for q in (comp, tens, Mz, My, V))   # numerical dust
@@ -88,6 +112,8 @@ def dc_exact(kind: str, d: dict, c: dict) -> float | None:
             return None
         if My and c.get("Mcy"):
             parts.append(My / c["Mcy"])
+        if comp and c.get("Pc") and c.get("Mcx"):                 # a beam with axial force: 9.3.1.3
+            parts.append(comp / c["Pc"] + (Mz / c["Mcx"] if Mz else 0.0) + (My / c["Mcy"] if My and c.get("Mcy") else 0.0))
         return max(parts) if parts else None
     if kind == "brace":
         parts = []
@@ -99,23 +125,21 @@ def dc_exact(kind: str, d: dict, c: dict) -> float | None:
             elif c.get("Pc") and not comp:
                 parts.append(tens / c["Pc"])
         return max(parts) if parts else None
-    # column: H1-1 interaction with the major/minor capacities that are recorded
+    # column: IS 800 9.3.1.3 linear interaction with the recorded design strengths
     Pc = c.get("Pc")
     if not Pc:
         return None
-    pr = comp / Pc
-    mterm = 0.0
+    dc = comp / Pc
     if Mz:
         if not c.get("Mcx"):
             return None
-        mterm += Mz / c["Mcx"]
+        dc += Mz / c["Mcx"]
     if My:
         if not c.get("Mcy"):
             return None
-        mterm += My / c["Mcy"]
-    dc = (pr + 8.0 / 9.0 * mterm) if pr >= 0.2 else (pr / 2.0 + mterm)
+        dc += My / c["Mcy"]
     if tens and c.get("Pt"):
-        dc = max(dc, tens / c["Pt"] + mterm)
+        dc = max(dc, tens / c["Pt"] + (Mz / c["Mcx"] if Mz else 0.0) + (My / c["Mcy"] if My else 0.0))
     if c.get("Vc") and V:
         dc = max(dc, V / c["Vc"])
     return dc
@@ -160,9 +184,9 @@ def member_dcs(design_members: list[dict], base_groups: dict, new_groups: dict, 
                 if e0b is not None and e1b is not None:
                     fix = dc0 / e0                                       # the package's rounding, kept
                     dc, dc_base, method = e1b * fix, e0b * fix, "exact"
-                    driver = "AISC 360 check with the recorded φRₙ" + (" / φ" if basis == "nominal" else "")
+                    driver = "IS 800 check with the recorded design strengths" + (" × γm" if basis == "nominal" else "")
         if dc is None:
-            f = phi if basis == "nominal" else 1.0
+            f = (1.0 / phi) if basis == "nominal" else 1.0        # D/Rn = (D/Rd) / γm
             dc_base = dc0 * f
             if b:
                 dc, driver = dc_scaled(kind, b, n, dc_base)
@@ -175,20 +199,23 @@ def member_dcs(design_members: list[dict], base_groups: dict, new_groups: dict, 
     return out
 
 
-CAPACITY_DESIGNED = re.compile(r"mpr|^vh(_|$)|expected|^ry|omega|om0|1\.1", re.I)
+# steltic_india records the capacity-designed demands with their basis in the key: P_12_2_3_N / axial_12_2_3_N
+# (IS 800 12.2.3), M_1p2Mp_Nmm (12.10.2 / 12.11.2), Pu_capacity_design_N, *_overstrength_* (IS 18168 5.5)
+CAPACITY_DESIGNED = re.compile(r"mpr|^vh(_|$)|expected|^ry|omega|om0|1p2mp|1[._]2\s*_?mp|capacity_design|overstrength|12_2_3|12\.2\.3|18168|_basis$", re.I)
 
 
 def connection_dcs(design_conns: list[dict], base_h: dict, new_h: dict, basis: str = "nominal") -> dict:
     """Connection D/C scaled by the change in the demand that sizes it (the capacity-designed
-    demands -- M_pr, V_h, R_y-based -- do not change with the analysis model). In the nominal
-    basis the recorded D/(phi*Rn) is multiplied by the phi of the recorded limit state."""
+    demands -- 1.2 Mp, Ry-based, IS 800 12.2.3 / IS 18168 overstrength -- do not change with the
+    analysis model). In the nominal basis the recorded D/Rd is divided by the γm of the recorded
+    limit state."""
     out = {}
     for c in design_conns:
         cid, dc_rec = c.get("id") or "", c.get("DC")
         if not isinstance(dc_rec, (int, float)):
             continue
-        phi = phi_connection(c.get("limit_state"), c.get("type"))
-        dc0 = dc_rec * (phi if basis == "nominal" else 1.0)
+        phi = phi_connection(c.get("limit_state"), c.get("type"))        # γm of the recorded limit state
+        dc0 = dc_rec * ((1.0 / phi) if basis == "nominal" else 1.0)
         text = " ".join(str(x) for x in (cid, c.get("type"), c.get("limit_state"), c.get("section"))).lower()
         best, which = 1.0, "unchanged"
         mapped = []
@@ -328,7 +355,7 @@ def analyse(spec: dict, results: list[dict], probe: dict, basis: str = "nominal"
     design = (probe or {}).get("design") or {}
     dmembers, dconns = design.get("members") or [], design.get("connections") or []
     out = {"n_planned": int(spec.get("n") or 0), "n_done": len(ok), "n_failed": len(failed), "seed": spec.get("seed"),
-           "basis": basis, "basis_label": BASES[basis], "ratio_label": ("D/Rₙ" if basis == "nominal" else "D/φRₙ"),
+           "basis": basis, "basis_label": BASES[basis], "ratio_label": ("D/Rₙ" if basis == "nominal" else "D/Rd"),
            "phi_notes": PHI_NOTES,
            "failed": [{"id": r["id"], "error": r.get("error")} for r in failed][:20], "base": None, "rows": [],
            "members": None, "connections": None, "drift": None, "groups": [], "conn_table": [], "governing": None,
@@ -349,7 +376,7 @@ def analyse(spec: dict, results: list[dict], probe: dict, basis: str = "nominal"
                    "connection_max": (c0[govc0]["dc"] if govc0 else None), "governing_connection": govc0,
                    "connection_max_recorded": (c0[govc0]["dc_recorded"] if govc0 else None),
                    "drift_ratio": (base.get("drift") or {}).get("ratio"), "drift_limit": (base.get("drift") or {}).get("limit"),
-                   "T1": base.get("T1"), "V_kip": base.get("V_kip"), "W_kip": base.get("W_kip"), "Cs": base.get("Cs"), "seconds": base.get("seconds"),
+                   "T1": base.get("T1"), "VB_kN": base.get("VB_kN"), "W_kN": base.get("W_kN"), "Ah": base.get("Ah"), "seconds": base.get("seconds"),
                    "methods": {gid: v["method"] for gid, v in m0.items()},
                    "n_exact": sum(1 for v in m0.values() if v["method"] == "exact"), "n_scaled": sum(1 for v in m0.values() if v["method"] != "exact")}
     per_group = {gid: [] for gid in m0}
@@ -374,7 +401,7 @@ def analyse(spec: dict, results: list[dict], probe: dict, basis: str = "nominal"
                             "governing_combo": (md[gov]["combo"] if gov else None), "governing_story": (md[gov]["story"] if gov else None),
                             "n_over": sum(1 for v in md.values() if v["dc"] > 1.0),
                             "connection_max": (cd[govc]["dc"] if govc else None), "governing_connection": govc,
-                            "drift_ratio": (r.get("drift") or {}).get("ratio"), "T1": r.get("T1"), "V_kip": r.get("V_kip"), "Cs": r.get("Cs"),
+                            "drift_ratio": (r.get("drift") or {}).get("ratio"), "T1": r.get("T1"), "VB_kN": r.get("VB_kN"), "Ah": r.get("Ah"),
                             "seconds": r.get("seconds"), "E_factor": s.get("E_factor"), "thk_mean": s.get("thk_mean"), "thk_min": s.get("thk_min"),
                             "lean_top": s.get("lean_top"), "psi_max": s.get("psi_max"), "dead": s.get("dead"),
                             "groups": {gid: round(v["dc"], 4) for gid, v in md.items()}})
@@ -428,7 +455,7 @@ def analyse(spec: dict, results: list[dict], probe: dict, basis: str = "nominal"
     # ---- what drives the scatter
     corr = []
     keys = [("E_factor", "E"), ("thk_mean", "mean thickness factor"), ("thk_min", "thinnest section group"), ("lean_top", "resultant lean at the top"),
-            ("psi_max", "largest story lean"), ("dead", "dead load factor")]
+            ("psi_max", "largest storey lean"), ("dead", "dead load factor")]
     summaries = [r.get("sample_summary") or {} for r in ok]
     for key, label in keys:
         v = [s.get(key) for s in summaries]
@@ -462,12 +489,12 @@ def assessment(a: dict) -> list[str]:
     nominal = a.get("basis", "nominal") == "nominal"
     lines = []
     if nominal:
-        lines.append(f"Ratios are {R}: the FACTORED demand of each ASCE 7-22 combination over the NOMINAL capacity Rₙ -- the resistance factor "
-                     f"φ is taken out of the design's recorded φRₙ (φ = 0.90 for flexure, compression, tension and interaction; 1.00 for shear of "
-                     f"rolled I-shapes; 0.75 for bolts, welds, block shear and rupture; 0.90 for panel zones, plate yielding and CJP welds). "
-                     f"1.0 therefore means the demand reaches the nominal strength, not that the LRFD check is exactly met; the design's own "
-                     f"maximum LRFD ratio was {b.get('member_max_recorded', 0):.3f}.")
-    lines.append(f"{n} as-built realisations were analysed with the design's own AISC 360 capacities. The maximum member {R} in the building is "
+        lines.append(f"Ratios are {R}: the FACTORED demand of each IS 800 Table 4 / IS 875 Part 5 combination over the NOMINAL strength Rₙ -- the "
+                     f"partial safety factor γm of IS 800 Table 5 is taken out of the design's recorded design strength Rd = Rₙ/γm (γm0 = 1.10 for "
+                     f"yielding, buckling, bending, shear and interaction; γm1 = 1.25 for rupture, block shear, bolts and shop welds; 1.50 for site welds). "
+                     f"1.0 therefore means the demand reaches the nominal strength, not that the IS 800 check is exactly met; the design's own "
+                     f"maximum IS 800 ratio was {b.get('member_max_recorded', 0):.3f}.")
+    lines.append(f"{n} as-built realisations were analysed with the design's own IS 800 design strengths. The maximum member {R} in the building is "
                  f"{st['mean']:.3f} on average (COV {100 * st['cov']:.1f}%, range {st['min']:.3f}–{st['max']:.3f}, 95th percentile {st['p95']:.3f}) "
                  f"against {b['member_max']:.3f} for the design as drawn.")
     if st.get("invariant") and g.get("base"):
@@ -498,7 +525,7 @@ def assessment(a: dict) -> list[str]:
     d = a.get("drift")
     if d:
         ds = d["stats"]
-        lines.append(f"Design story drift: {ds['mean']:.3f} of the allowable on average (design {b['drift_ratio']:.3f}); "
+        lines.append(f"Storey drift (IS 1893 7.11.1.1): {ds['mean']:.3f} of the limit on average (design {b['drift_ratio']:.3f}); "
                      f"{_pct(ds['p_over_limit'])} of realisations exceed the limit.")
     look = [x for x in a.get("groups", []) if x["p_over_1"] > 0][:5]
     if look:
@@ -513,9 +540,9 @@ def assessment(a: dict) -> list[str]:
         lines.append(f"What drives the scatter of the maximum member {R} (Spearman rank correlation): " +
                      ", ".join(f"{c['label']} ρ = {c['rho']:+.2f}" for c in corr[:3]) + ".")
     if b.get("n_scaled"):
-        lines.append(f"{b['n_exact']} member group(s) are re-checked with the AISC 360 formula and the recorded capacities; {b['n_scaled']} carry the "
-                     f"design's ratio scaled by the largest growth of their demand components (the package records their D/C but not every capacity "
-                     f"the check used) -- conservative.")
+        lines.append(f"{b['n_exact']} member group(s) are re-checked with the IS 800 formula (8.2 / 8.4 / 7.1.2 / 9.3.1.3) and the recorded design "
+                     f"strengths; {b['n_scaled']} carry the design's ratio scaled by the largest growth of their demand components (the engine's "
+                     f"recorded 9.3.2.2 check with its amplification and LTB is not reproduced by the recorded strengths alone) -- conservative.")
     if a.get("n_failed"):
         lines.append(f"{a['n_failed']} realisation(s) failed to analyse and are excluded; see the run log.")
     return lines
@@ -652,16 +679,16 @@ def svg_groups(a: dict, width: int = 820) -> str:
 
 def plots(a: dict) -> dict:
     R = a.get("ratio_label") or "D/C"
-    what = "factored demand / nominal capacity, φ removed" if a.get("basis", "nominal") == "nominal" else "the design's LRFD ratio D/φRₙ"
+    what = "factored demand / nominal strength, γm taken out" if a.get("basis", "nominal") == "nominal" else "the design's IS 800 ratio D/Rd"
     return {"members": svg_histogram(a.get("members"), f"Maximum member {R} in the building", f"max {R} over the member groups — {what}", limit_label=R),
             "connections": svg_histogram(a.get("connections"), f"Maximum connection {R} in the building", f"max {R} over the designed connections — {what}", limit_label=R),
-            "drift": svg_histogram(a.get("drift"), "Design story drift / allowable", "max design story drift as a fraction of the ASCE 7 allowable", limit_label="drift / allowable"),
+            "drift": svg_histogram(a.get("drift"), "Storey drift / IS 1893 limit", "max storey drift as a fraction of the IS 1893 7.11.1.1 limit (0.004 h)", limit_label="drift / limit"),
             "groups": svg_groups(a)}
 
 
 # ---------------------------------------------------------------- written outputs
 ROW_COLS = ["id", "member_max", "governing", "governing_combo", "governing_story", "n_over", "connection_max", "governing_connection",
-            "drift_ratio", "T1", "V_kip", "Cs", "E_factor", "thk_mean", "thk_min", "lean_top", "psi_max", "dead", "seconds"]
+            "drift_ratio", "T1", "VB_kN", "Ah", "E_factor", "thk_mean", "thk_min", "lean_top", "psi_max", "dead", "seconds"]
 
 
 def write_outputs(study_dir: pathlib.Path, a: dict, project: str, probe: dict | None):
@@ -724,13 +751,13 @@ def report_html(a: dict, project: str, probe: dict | None, p: dict) -> str:
     model = probe or {}
     R = a.get("ratio_label") or "D/C"
     phi_rows = "".join(f"<tr><td>{html.escape(w)}</td><td class=n>{v:.2f}</td><td>{html.escape(src)}</td></tr>" for w, v, src in (a.get("phi_notes") or []))
-    basis_box = (f"<div class=box><p><b>Ratios are {R}: factored demand over NOMINAL capacity.</b> The design's package records φRₙ and D/φRₙ; "
-                 f"here the resistance factor is taken out (Rₙ = φRₙ / φ), so 1.0 means the factored demand reaches the nominal strength, not that the "
-                 f"LRFD check is exactly met. The design's own maximum LRFD ratio was {f3(b.get('member_max_recorded'))} (members) and "
-                 f"{f3(b.get('connection_max_recorded'))} (connections). The φ values assumed to undo the factoring:</p>"
-                 f"<table><tr><th>check</th><th>φ</th><th>clause</th></tr>{phi_rows}</table></div>"
+    basis_box = (f"<div class=box><p><b>Ratios are {R}: factored demand over NOMINAL strength.</b> The design's package records the IS 800 design "
+                 f"strengths Rd = Rₙ/γm and D/Rd; here the partial safety factor is taken out (Rₙ = γm Rd), so 1.0 means the factored demand reaches "
+                 f"the nominal strength, not that the IS 800 check is exactly met. The design's own maximum IS 800 ratio was {f3(b.get('member_max_recorded'))} "
+                 f"(members) and {f3(b.get('connection_max_recorded'))} (connections). The γm values (IS 800 Table 5) assumed to undo the factoring:</p>"
+                 f"<table><tr><th>check</th><th>γm</th><th>clause</th></tr>{phi_rows}</table></div>"
                  if a.get("basis", "nominal") == "nominal" else
-                 f"<div class=box><p><b>Ratios are {R}: the design's own LRFD ratio</b> (factored demand over φRₙ), recomputed for each realisation.</p></div>")
+                 f"<div class=box><p><b>Ratios are {R}: the design's own IS 800 ratio</b> (factored demand over Rd = Rₙ/γm), recomputed for each realisation.</p></div>")
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Probabilistic analysis — {html.escape(project)}</title>
 <style>body{{background:{P['surface']};color:{P['ink']};font:14px/1.5 'Segoe UI',system-ui,sans-serif;margin:0;padding:28px 36px;max-width:1100px}}
 h1{{font-size:20px;color:#fff;margin:0 0 4px}} h2{{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:{P['dim']};margin:28px 0 8px}}
@@ -740,19 +767,20 @@ th{{color:{P['dim']};font-size:11px;text-transform:uppercase;letter-spacing:.06e
 .box{{border:1px solid {P['grid']};border-radius:8px;padding:14px 18px;margin:10px 0}} .assess li{{margin:4px 0}}
 code{{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}} svg{{max-width:100%;height:auto}}</style></head><body>
 <h1>Probabilistic analysis — {html.escape(project)}</h1>
-<p class=dim>{html.escape(str(model.get('name') or ''))} · {model.get('members', '?')} members · {model.get('stories', '?')} stories · {html.escape(str(model.get('system') or ''))}
+<p class=dim>{html.escape(str(model.get('name') or ''))} · {model.get('members', '?')} members · {model.get('stories', '?')} storeys · {html.escape(str(model.get('system') or ''))}
 · seed {a.get('seed')} · {time.strftime('%Y-%m-%d %H:%M')}</p>
-<div class=box><p>Monte Carlo variation of the as-built structure: modulus of elasticity, plate thickness per section group and a story-by-story
-out-of-plumb profile (and optionally the dead load) are drawn from published statistical distributions; each realisation is analysed by the design's
-own elastic LRFD model -- every ASCE 7-22 combination with P-Δ, the ELF forces from its own period -- and the resulting demands are checked
-against the design's own AISC 360 capacities, which are never recomputed. The question answered is whether the building as built still satisfies the
+<div class=box><p>Monte Carlo variation of the as-built structure: modulus of elasticity, plate thickness per section group and a storey-by-storey
+out-of-plumb profile (and optionally the dead load) are drawn from published statistical distributions (information on the scatter of real steel
+and real erection, not a design basis); each realisation is analysed by the design's own elastic IS 800 model -- every IS 800 Table 4 / IS 875 Part 5
+combination of the package's load_plan with P-Δ, the IS 1893 forces from its own period -- and the resulting demands are checked against the
+design's own IS 800 design strengths, which are never recomputed. The question answered is whether the building as built still satisfies the
 member checks it was designed to; a ratio above 1.0 here is a place to look, not a code requirement to act.</p></div>
 {basis_box}
 <h2>Maximum member {R}</h2>{p['members']}
 <h2>{R} per member group</h2>{p.get('groups', '')}
 <h2>Maximum connection {R}</h2>{p['connections']}
 <h2>Assessment</h2><ul class=assess>{''.join('<li>' + html.escape(s) + '</li>' for s in a.get('assessment') or [])}</ul>
-<h2>Statistical parameters</h2>{stat_rows(a.get('members'), f'Maximum member {R}')}{stat_rows(a.get('connections'), f'Maximum connection {R}')}{stat_rows(a.get('drift'), 'Design story drift / allowable')}
+<h2>Statistical parameters</h2>{stat_rows(a.get('members'), f'Maximum member {R}')}{stat_rows(a.get('connections'), f'Maximum connection {R}')}{stat_rows(a.get('drift'), 'Storey drift / IS 1893 limit')}
 <h2>Governing check</h2>
 <p class=dim>Design: {html.escape(str(g.get('base') or ''))} — {html.escape(str(b.get('governing_limit_state') or ''))}, combination <code>{html.escape(str(b.get('governing_combo') or ''))}</code></p>
 <table><tr><th>governing group</th><th>runs</th><th>share</th></tr>{gov_rows}</table>

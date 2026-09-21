@@ -2,30 +2,47 @@
   "schema": 1,
   "id": "steltic_probabilistic",
   "name": "Probabilistic analysis",
-  "blurb": "Monte Carlo as-built variations of an HR Steel design — E, plate thickness, story out-of-plumb drawn from the literature — re-analysed with the design's own LRFD model and checked against its own AISC 360 capacities. Where would you take a second look?",
-  "accent": "#ffb070",
+  "blurb": "Monte Carlo as-built variations of an HR Steel (IS 800) design — E, plate thickness, storey out-of-plumb drawn from the published surveys (information, not a design basis) — re-analysed with the design's own IS 800 model and load_plan combinations and checked against its own IS 800 design strengths (γm from Table 5 taken out or kept). Where would you take a second look?",
+  "accent": "#ffc98a",
   "order": 28,
-  "homepage": "https://github.com/Steltic/steltic_hub",
+  "homepage": "https://github.com/Steltic/steltic_hub_india",
   "source": {
     "bundled": "steltic_probabilistic",
-    "url": "https://github.com/Steltic/steltic_hub"
+    "url": "https://github.com/Steltic/steltic_hub_india"
   },
-  "needs": ["steltic", "steltic_nonlinear"],
+  "needs": [
+    "steltic_india",
+    "steltic_nonlinear_india"
+  ],
   "env": {
     "python": "3.12",
-    "install": ["-r", "requirements.txt"]
+    "install": [
+      "-r",
+      "requirements.txt"
+    ]
   },
   "env_vars": {
-    "STELTIC_URL": "{server.steltic}",
-    "STELTIC_ENGINE_DIR": "{need.steltic}/steel_engine",
-    "DDM_PYTHON": "{python.steltic_nonlinear}",
-    "PROB_JOBS": "{jobs_dir}"
+    "STELTIC_URL": "{server.steltic_india}",
+    "STELTIC_ENGINE_DIR": "{need.steltic_india}/steel_engine",
+    "DDM_PYTHON": "{python.steltic_nonlinear_india}",
+    "PROB_JOBS": "{jobs_dir}",
+    "INDIA_CORPUS_ROOT": "{data_dir}/grokbot"
   },
   "server": {
-    "command": ["-m", "uvicorn", "probabilistic.main:app", "--host", "127.0.0.1", "--port", "{port}"],
+    "command": [
+      "-m",
+      "uvicorn",
+      "probabilistic.main:app",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "{port}"
+    ],
     "health": "/healthz",
     "cwd": "{module_dir}",
-    "requires": ["steltic"]
+    "requires": [
+      "steltic_india"
+    ]
   },
   "output": {
     "root": "{job_dir}/probabilistic"
@@ -36,7 +53,7 @@
       "title": "Probabilistic",
       "kind": "embed",
       "src": "/?project={job}",
-      "blurb": "Load this project's HR Steel design (or any package), choose the number of as-built variations (default 100), run, and read the distribution of the maximum member and connection D/C against the design's own values. Runs in the Nonlinear module's environment; nothing is recomputed on the capacity side."
+      "blurb": "Load this project's HR Steel (IS 800) design (or any package), choose the number of as-built variations (default 100), run, and read the distribution of the maximum member and connection D/C against the design's own values (kN, mm; IS 1893 storey drift against 0.004 h). Runs in the Nonlinear (SNL-IN) module's environment; nothing is recomputed on the capacity side."
     },
     {
       "id": "files",

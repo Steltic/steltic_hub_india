@@ -1,7 +1,9 @@
-"""worker.py -- one process, a batch of Monte Carlo realisations of the LRFD design model.
+"""worker.py -- one process, a batch of Monte Carlo realisations of the IS 800 design model.
 
-Runs under the Nonlinear module's interpreter (openseespy, numpy) with the HR Steel engine on
-sys.path -- never under the module server's own interpreter. Stdlib only on top of those.
+Runs under the Nonlinear (SNL-IN) module's interpreter (openseespy, numpy) with the HR Steel
+(steltic_india) engine on sys.path -- never under the module server's own interpreter. Stdlib
+only on top of those. Units are the engine's: N, mm (cfg['units'] = 'N-mm' after the package's
+cfg.py has run india_units.apply_si_geometry); the outputs are written in kN.
 
     python worker.py probe --package DIR --engine DIR --out FILE
         -> model summary, section groups, the design's D/C table, the combination labels
@@ -9,15 +11,17 @@ sys.path -- never under the module server's own interpreter. Stdlib only on top 
         -> <out>/r0000.json, r0003.json ... one per realisation, progress lines on stdout
 
 A realisation is the design's own elastic analysis model (HR Steel's engine: the lumped-mass
-dynamic model for the period and the ELF forces, the distributed static model for every ASCE 7-22
-LRFD combination with P-Delta) with the sampled quantities substituted:
+dynamic model for the periods and the IS 1893 response-spectrum / equivalent-static forces scaled
+to VB (7.7.3), the distributed static model for every IS 800 Table 4 / IS 875 Part 5 combination
+of the package's load_plan with P-Delta) with the sampled quantities substituted:
   * E for the whole building (one draw)
   * flange/web thickness per SECTION GROUP -> A, I, J of every member in the group
   * a story-by-story out-of-plumb profile in X and Y (node coordinates), accumulated up the height
   * optionally the dead load (mass and gravity) for the whole building
-It writes the per-group DEMAND envelope (P, Mx, My, V and the governing combination), the period,
-the base shear and the design drifts. Capacities are never recomputed: the server applies the
-design's own AISC 360 capacities to these demands. Realisation 0 is the nominal model.
+It writes the per-group DEMAND envelope (P, Mz, My, V and the governing combination), the period,
+the base shear VB and the storey drifts (IS 1893 7.11.1.1). Capacities are never recomputed: the
+server applies the design's own IS 800 design strengths (Pd, Td, Md, Vd) to these demands.
+Realisation 0 is the nominal model.
 """
 import argparse, json, math, os, sys, time, traceback
 
@@ -142,7 +146,7 @@ def _roles(E, info0, cfg):
 
 
 def analyse(package, engine_dir, sample, nseg=None):
-    """One elastic LRFD analysis of the (perturbed) design -> group demand envelopes + globals."""
+    """One elastic IS 800 limit-state analysis of the (perturbed) design -> group demand envelopes + globals."""
     import openseespy.opensees as ops
     import engine3d as E
     import design_pipeline as DP
@@ -155,7 +159,7 @@ def analyse(package, engine_dir, sample, nseg=None):
     with Perturbation(sample, levels):
         E.clear_caches()
         t0 = time.time()
-        cases = DP.combos(cfg)
+        cases = DP.combos(cfg)          # India: the load_plan's IS 800 Table 4 / IS 875-5 combinations
         info0 = E.build(cfg, "PDelta")
         reg = {t: (kind, sec, n1, n2) for (t, kind, sec, n1, n2) in info0["ele"]}
         role = _roles(E, info0, cfg)
@@ -214,7 +218,13 @@ def analyse(package, engine_dir, sample, nseg=None):
         "brace_P": max(_max(("brace",), "comp"), _max(("brace",), "tens")),
         "V_base": float(glob.get("V") or 0.0),
     }
-    return {"T1": glob.get("T1"), "Ta": glob.get("Ta"), "Cs": glob.get("Cs"), "V_kip": glob.get("V"), "W_kip": glob.get("W"),
+    # forces come back in the engine's units: N on an India (N-mm) job -> report kN
+    fscale = 0.001 if E.unit_system() == "N-mm" else 1.0
+    ind = glob.get("india") or {}
+    V, W = glob.get("V"), glob.get("W")
+    return {"T1": glob.get("T1"), "Ta": glob.get("Ta"), "Ah": ind.get("Cs") if ind else glob.get("Cs"),
+            "VB_kN": (V * fscale if isinstance(V, (int, float)) else None), "W_kN": (W * fscale if isinstance(W, (int, float)) else None),
+            "method": ind.get("method"), "unit_system": E.unit_system(),
             "drift": {"mdx": glob.get("mdx"), "mdy": glob.get("mdy"), "limit": dl, "ratio": (max(glob.get("mdx") or 0, glob.get("mdy") or 0) / dl if dl else None)},
             "checks": glob.get("checks"), "n_cases": len(cases), "n_members": len(reg), "kinds": kinds,
             "groups": groups, "handles": handles, "seconds": round(time.time() - t0, 1)}
@@ -246,14 +256,21 @@ def probe(a):
         inp = m.get("inputs") or {}
         members.append({"id": m.get("id"), "kind": inp.get("kind"), "role": inp.get("role"), "section": (inp.get("section") or "").upper(),
                         "DC": m.get("DC"), "limit_state": m.get("limit_state"), "capacity": m.get("capacity") or {},
-                        "demands": {k: inp.get(k) for k in ("P_comp_kip", "P_tens_kip", "Mz_kipin", "My_kipin", "V_kip", "governing_combo")}})
+                        "checks": [{"name": c.get("name"), "dc": c.get("dc"), "clause": c.get("clause")} for c in (m.get("checks") or []) if isinstance(c, dict)],
+                        "demands": {k: inp.get(k) for k in ("P_comp_N", "P_tens_N", "Mz_Nmm", "My_Nmm", "V_N", "governing_combo")}})
     conns = []
     for c in pkg.get("connections", []):
         conns.append({"id": c.get("id"), "type": c.get("type"), "section": c.get("section"), "DC": c.get("DC"),
                       "limit_state": c.get("limit_state"), "demand": c.get("demand") or {}, "capacity": c.get("capacity") or {}})
+    seis = cfg.get("seis") if isinstance(cfg.get("seis"), dict) else {}
+    ss = ((cfg.get("load_plan") or {}).get("seismic_summary") or {}) if isinstance(cfg.get("load_plan"), dict) else {}
     out = {"name": os.path.basename(a.package.rstrip("/\\")), "members": len(info0["ele"]), "stories": len(cfg["heights"]), "levels": levels,
-           "NX": cfg.get("NX"), "NY": cfg.get("NY"), "Fy_nominal": float(cfg.get("Fy", 50.0)), "system": (pkg.get("capacity_design") or {}).get("system"),
-           "risk_category": cfg.get("risk_category"), "groups": sorted(groups.values(), key=lambda g: (g["kind"], g["role"], g["section"])),
+           "NX": cfg.get("NX"), "NY": cfg.get("NY"), "Fy_nominal": float(cfg.get("Fy", 250.0)), "steel_grade": cfg.get("steel_grade"),
+           "units": cfg.get("units") or E.unit_system(), "system": (pkg.get("capacity_design") or {}).get("system") or cfg.get("system"),
+           "seismic": {"zone": seis.get("zone") or ss.get("zone"), "Z": seis.get("Z") or ss.get("Z"), "I": seis.get("I") or ss.get("I"),
+                       "R": seis.get("R") or ss.get("R"), "soil": seis.get("soil") or ss.get("soil")},
+           "design_status": (pkg.get("design_status") or {}).get("status"),
+           "groups": sorted(groups.values(), key=lambda g: (g["kind"], g["role"], g["section"])),
            "sections": sorted({g["section"] for g in groups.values()}),
            "combos": [{"label": c[0], "col_only": bool(c[5])} for c in cases],
            "design": {"members": members, "connections": conns, "n_members_dc": sum(1 for m in members if isinstance(m["DC"], (int, float))),
@@ -296,7 +313,7 @@ def run(a):
                 if _i == 59:
                     raise
                 time.sleep(0.01)
-        print(json.dumps({"event": "done", "id": i, "ok": out.get("ok"), "T1": out.get("T1"), "V_kip": out.get("V_kip"),
+        print(json.dumps({"event": "done", "id": i, "ok": out.get("ok"), "T1": out.get("T1"), "VB_kN": out.get("VB_kN"),
                           "seconds": out.get("seconds"), "error": out.get("error")}), flush=True)
 
 

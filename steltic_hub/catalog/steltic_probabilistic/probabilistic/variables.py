@@ -2,9 +2,15 @@
 
 The study asks whether the building AS BUILT -- not quite plumb, not quite the tabulated
 section, not quite the handbook stiffness -- still satisfies the design code's member checks
-with the design's own capacities. Only quantities that change the ELASTIC DEMANDS are sampled;
-what enters the capacity side (Fᵧ, residual stresses, member out-of-straightness) is
-deliberately held at the design values (see NOT_VARIED).
+(IS 800:2007 limit state design) with the design's own capacities. Only quantities that change
+the ELASTIC DEMANDS are sampled; what enters the capacity side (fᵧ, residual stresses, member
+out-of-straightness) is deliberately held at the design values (see NOT_VARIED).
+
+India edition: the nominal modulus is E = 2.0 × 10⁵ MPa (IS 800 2.2.4.1), the erection tolerance
+is IS 7215 (its plumb limit is to be read from the standard -- TODO(verify)), the steel is IS 2062. The
+statistical sources are the published surveys (Galambos & Ravindra; Beaulieu & Adams; Lindner &
+Gietzelt; Ellingwood et al.) -- INFORMATION on the scatter of real steel and real erection, not a
+design basis: no foreign rule is applied as a code requirement.
 
 Every variable carries its default distribution, the level it is sampled at (section group,
 story, building) and where the default comes from. Everything is editable from the UI; the
@@ -14,43 +20,50 @@ from __future__ import annotations
 import math
 import numpy as np
 
-NOMINAL_E = 29000.0
+NOMINAL_E = 200000.0        # MPa, IS 800:2007 2.2.4.1
 
 VARIABLES = [
     {"id": "E", "label": "Modulus of elasticity E", "level": "building", "kind": "scale", "dist": "lognormal",
-     "mean": 1.00, "cov": 0.06, "unit": "× 29,000 ksi", "enabled": True,
-     "what": "One draw for the whole building. Changes every member stiffness, so the period, the ELF base shear (where the period governs Cₛ), "
-             "the P-Δ amplification and the design drifts move with it.",
-     "source": "Galambos & Ravindra (1978), Properties of steel for use in LRFD, ASCE J. Struct. Div. 104(ST9): E mean 1.00 × nominal, COV 0.06."},
+     "mean": 1.00, "cov": 0.06, "unit": "× 2.0 × 10⁵ MPa", "enabled": True,
+     "what": "One draw for the whole building. Changes every member stiffness, so the period, the response-spectrum base shear (IS 1893 7.7 -- "
+             "where the period governs Sa/g and the 7.7.3 scaling to VB), the P-Δ amplification and the storey drifts move with it.",
+     "source": "Galambos & Ravindra (1978), Properties of steel for use in LRFD, J. Struct. Div. 104(ST9): E mean 1.00 × nominal, COV 0.06 "
+               "(a survey of rolled steel; used here as information on the scatter of E, not as a design rule)."},
     {"id": "thk", "label": "Plate thickness (fabrication)", "level": "group", "kind": "scale", "dist": "lognormal",
      "mean": 1.00, "cov": 0.05, "unit": "× nominal tᶠ, tᵥ", "enabled": True,
      "what": "Flange and web thickness per section group (same section = same rolling): A and I scale with it, J with its cube. "
              "Alters the relative stiffness of the members, so forces redistribute between frames and between beams and columns.",
-     "source": "Galambos & Ravindra (1978): fabrication factor on A and Z, mean 1.00, COV 0.05 (rolling tolerance, ASTM A6)."},
+     "source": "Galambos & Ravindra (1978): fabrication factor on A and Z, mean 1.00, COV 0.05 (rolling tolerance; IS 1852 / IS 12779 govern the tolerances of IS 808 sections -- information, not a design rule)."},
     {"id": "psi", "label": "Story out-of-plumb ψ", "level": "story", "kind": "abs", "dist": "normal",
-     "mean": 0.0, "std": 1.0 / 1000.0, "unit": "rad, per story, X and Y", "enabled": True,
-     "what": "Lean of each story in X and in Y, independent draws, accumulated up the height -- a random lean profile in the analysis "
+     "mean": 0.0, "std": 1.0 / 1000.0, "unit": "rad, per storey, X and Y", "enabled": True,
+     "what": "Lean of each storey in X and in Y, independent draws, accumulated up the height -- a random lean profile in the analysis "
              "geometry, so the gravity loads produce P-Δ sway moments the way they would in the erected frame (the design's notional-load "
-             "or nominal-lean allowance is not removed).",
-     "source": "Surveys: Beaulieu & Adams (1977, 1978); Lindner & Gietzelt (1984). Default σ = 1/1000 so that 2σ equals the H/500 erection "
-               "tolerance (AISC Code of Standard Practice); mean zero. Replace with survey statistics for the fabricator in hand when available."},
+             "allowance, IS 800 4.3.6, is not removed).",
+     "source": "Surveys: Beaulieu & Adams (1977, 1978); Lindner & Gietzelt (1984). Default σ = 1/1000 (2σ = a 1/500 lean), mean zero -- a "
+               "survey-based starting point. The erection tolerance of the frame in India is IS 7215 (not in the corpus: TODO(verify) its "
+               "plumb limit and set σ so that 2σ matches it). Replace with survey statistics for the fabricator in hand when available."},
     {"id": "dead", "label": "Dead load (mass and gravity)", "level": "building", "kind": "scale", "dist": "lognormal",
      "mean": 1.05, "cov": 0.10, "unit": "× nominal D", "enabled": False,
      "what": "One factor on the floor, roof and cladding dead load -- both the seismic weight and the gravity demands. OFF by default: "
              "the question asked here is about the structure as built under the code's nominal loads. Turn it on to see the load side too.",
-     "source": "Ellingwood, Galambos, MacGregor & Cornell (1980), Development of a probability based load criterion for American National "
-               "Standard A58, NBS SP 577: dead load mean 1.05 × nominal, COV 0.10."},
+     "source": "Ellingwood, Galambos, MacGregor & Cornell (1980), NBS SP 577: dead load mean 1.05 × nominal, COV 0.10 (information on the "
+               "scatter of dead load; the IS 875 Part 1 unit weights stay the nominal basis)."},
 ]
 VAR_IDS = [v["id"] for v in VARIABLES]
 
 NOT_VARIED = [
-    ("Yield stress Fᵧ", "enters the AISC 360 capacities, which are held at the design values (the design's own φRₙ are reused, never recomputed)"),
-    ("Residual stresses", "a capacity-side effect (column curve, plastic hinge onset); not part of an elastic LRFD demand model"),
-    ("Member out-of-straightness δ₀", "covered on the capacity side by the column curve and B₁; a single elastic element per column cannot carry it"),
-    ("Live, roof, wind and seismic load intensities", "the code's nominal values -- the question is whether the as-built structure still passes them"),
+    ("Yield stress fᵧ (IS 2062)", "enters the IS 800 design strengths, which are held at the design values (the design's own Pd, Td, Md, Vd are reused, never recomputed)"),
+    ("Residual stresses", "a capacity-side effect (IS 800 Table 7 buckling class, plastic hinge onset); not part of an elastic demand model"),
+    ("Member out-of-straightness", "covered on the capacity side by the IS 800 7.1.2.1 buckling curves and the 9.3.2.2 amplification; a single elastic element per member cannot carry it"),
+    ("Imposed, roof, wind and earthquake load intensities", "the IS 875 / IS 1893 characteristic values -- the question is whether the as-built structure still passes them"),
 ]
 
 CLAMPS = {"E": (0.7, 1.3), "thk": (0.8, 1.2), "psi": (-1.0 / 100.0, 1.0 / 100.0), "dead": (0.6, 1.5)}
+
+# Partial safety factors for resistance, IS 800:2007 Table 5. The design's package records the
+# DESIGN strengths Rd = Rn / γm; the "nominal" basis of this study undoes that: D/Rn = (D/Rd) / γm.
+GAMMA_M0 = 1.10      # yielding, buckling (members, plates, panel zones)
+GAMMA_M1 = 1.25      # ultimate / rupture (net section, bolts, welds, block shear)
 
 
 def variable(vid: str) -> dict:
