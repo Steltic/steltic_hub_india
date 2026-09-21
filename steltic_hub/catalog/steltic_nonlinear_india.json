@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "id": "steltic_nonlinear",
-  "name": "Nonlinear (SNL)",
-  "blurb": "Pushover (ASCE 41-23 NSP), NLRHA (ASCE 7-22 Ch.16) and DDM (GMNIA) on a Steltic design package, the four-analyses comparison, site-specific ground motions, the §16.1.4 design criteria draft, and three feedback loops that hand a verified re-design back to HR Steel.",
-  "accent": "#ff8a3d",
+  "id": "steltic_nonlinear_india",
+  "name": "Nonlinear (SNL-IN)",
+  "blurb": "Pushover, nonlinear response-history analysis (NLRHA) and the direct design method (DDM, GMNIA) on an HR Steel (IS 800) design package, the four-analyses comparison, the IS 1893 elastic target spectrum at DBE and MCE, a design-criteria draft, and feedback loops that hand a re-design back to HR Steel. IS 1893 (Part 1):2016 provides no acceptance criteria for nonlinear analysis; results are for information. The module reports response quantities — drifts, ductility demands, hinge rotations against the IS 800 Section 12 deformation capacities (0.02 / 0.04 rad) as reference, base shear against VB, λu — and no verdict.",
+  "accent": "#7b93e8",
   "order": 30,
-  "homepage": "https://github.com/Steltic/steltic_nonlinear",
+  "homepage": "https://github.com/Steltic/steltic_nonlinear_india",
   "source": {
-    "url": "https://github.com/Steltic/steltic_nonlinear",
+    "url": "https://github.com/Steltic/steltic_nonlinear_india",
     "branch": "main"
   },
   "env": {
@@ -18,12 +18,13 @@
     ]
   },
   "needs": [
-    "steltic"
+    "steltic_india"
   ],
   "env_vars": {
-    "STELTIC_ENGINE_DIR": "{need.steltic}/steel_engine",
-    "STELTIC_URL": "{server.steltic}",
-    "SNL_JOBS": "{jobs_dir}"
+    "STELTIC_ENGINE_DIR": "{need.steltic_india}/steel_engine",
+    "STELTIC_URL": "{server.steltic_india}",
+    "SNL_JOBS": "{jobs_dir}",
+    "INDIA_CORPUS_ROOT": "{data_dir}/grokbot"
   },
   "output": {
     "root": "{job_dir}"
@@ -31,14 +32,14 @@
   "viewers": [
     {
       "id": "steltic",
-      "label": "Steltic",
-      "accent": "#ffa15c",
+      "label": "HR Steel",
+      "accent": "#ff9933",
       "path": "viewer_3d.html"
     },
     {
       "id": "pushover",
       "label": "Pushover",
-      "accent": "#ff8a3d",
+      "accent": "#7b93e8",
       "path": "pushover/pushover_viewer_3d.html"
     },
     {
@@ -65,7 +66,7 @@
       "id": "run",
       "title": "Run",
       "kind": "form",
-      "blurb": "Three engines in sequence, each in its own process (openseespy is a process singleton). The design package is copied into this project folder first, so every output lands beside it. Typical times on two cores: pushover 5–15 min, NLRHA 30–90 min, DDM 30–70 min. The §16.1.4 design criteria draft is refreshed at the end of every run.",
+      "blurb": "Three engines in sequence, each in its own process (openseespy is a process singleton). The HR Steel (IS 800) package is copied into this project folder first, so every output lands beside it. NLRHA scales the suite to the IS 1893 ELASTIC spectrum — DBE = (Z/2)·I·Sa/g and MCE = Z·I·Sa/g, never divided by R — and runs both levels; the DDM takes its combinations from the package's load_plan (IS 875 / IS 1893). IS 1893 (Part 1):2016 provides no acceptance criteria for nonlinear analysis; results are for information. Typical times on two cores: pushover 5–15 min, NLRHA 30–90 min, DDM 30–70 min. The design-criteria draft is refreshed at the end of every run.",
       "run": {
         "kind": "cli",
         "cwd": "{job_dir}",
@@ -76,7 +77,7 @@
             "to": "{job_dir}",
             "required": true,
             "label": "design package",
-            "missing": "No design package for this project: run HR Steel on it first (its design is picked up automatically), or choose the .zip that HR Steel produced."
+            "missing": "No design package for this project: run HR Steel (IS 800) on it first (its design is picked up automatically), or choose the .zip that HR Steel produced."
           }
         ],
         "command": [
@@ -87,7 +88,7 @@
           "--out",
           "{job_dir}",
           "--steltic-engine",
-          "{need.steltic}/steel_engine"
+          "{need.steltic_india}/steel_engine"
         ]
       },
       "fields": [
@@ -100,19 +101,19 @@
         {
           "id": "package",
           "type": "file",
-          "label": "Steltic design package",
+          "label": "HR Steel design package",
           "accept": ".zip",
-          "default": "{out.steltic}",
-          "placeholder": "this project's HR Steel design (automatic)",
-          "help": "Leave as is to analyse the HR Steel design already in this project, or choose the .zip HR Steel produced (report.html, cfg.py, model_opensees.py, design/…)."
+          "default": "{out.steltic_india}",
+          "placeholder": "this project's HR Steel (IS 800) design (automatic)",
+          "help": "Leave as is to analyse the HR Steel design already in this project, or choose the .zip HR Steel produced (report.html, cfg.py, model_opensees.py, load_plan.json, design/…)."
         },
         {
           "id": "params",
           "type": "file",
-          "label": "Job hinge parameters",
+          "label": "Hinge parameters (optional)",
           "accept": ".json",
           "arg": "--params",
-          "help": "Job copy of hinge_params.json filled from AISC 342-22 / ASCE 41-23. Without it the pushover report carries the red UNVERIFIED banner."
+          "help": "Job copy of hinge_params.json. IS 800 / IS 1893 tabulate no hinge backbones: without a file the module's placeholder parameters are used and the pushover supplement carries the UNVERIFIED banner. Hinge rotations are reported against the IS 800 Section 12 deformation capacities (0.02 / 0.04 rad) as reference only."
         },
         {
           "id": "only",
@@ -166,61 +167,24 @@
           ]
         },
         {
-          "id": "risk_category",
+          "id": "level",
           "type": "select",
-          "label": "Risk category",
-          "arg": "--risk-category",
+          "label": "Hazard level (IS 1893 elastic spectrum)",
+          "arg": "--level",
           "default": "",
-          "help": "Drives the Chapter 16 acceptance rules and the BPON levels.",
+          "help": "DBE = (Z/2)·I·Sa/g, MCE = Z·I·Sa/g (IS 1893 6.4.2), no R. Both levels are run and reported by default.",
           "options": [
             {
               "value": "",
-              "label": "From the package"
+              "label": "DBE and MCE (default)"
             },
             {
-              "value": "I",
-              "label": "I"
+              "value": "DBE",
+              "label": "DBE only"
             },
             {
-              "value": "II",
-              "label": "II"
-            },
-            {
-              "value": "III",
-              "label": "III"
-            },
-            {
-              "value": "IV",
-              "label": "IV"
-            }
-          ]
-        },
-        {
-          "id": "site_class",
-          "type": "select",
-          "label": "Site class",
-          "arg": "--site-class",
-          "default": "D",
-          "options": [
-            {
-              "value": "A",
-              "label": "A"
-            },
-            {
-              "value": "B",
-              "label": "B"
-            },
-            {
-              "value": "C",
-              "label": "C"
-            },
-            {
-              "value": "D",
-              "label": "D"
-            },
-            {
-              "value": "E",
-              "label": "E"
+              "value": "MCE",
+              "label": "MCE only"
             }
           ]
         },
@@ -230,29 +194,7 @@
           "label": "Ground-motion records",
           "arg": "--n-records",
           "default": 11,
-          "help": "ASCE 7-22 Ch.16 requires at least 11 MCE_R pairs. FEMA P-695 far-field set ships with the module."
-        },
-        {
-          "id": "target",
-          "type": "select",
-          "label": "Scaling target",
-          "arg": "--target",
-          "default": "",
-          "help": "Site-specific targets need the Site hazard tab first (writes nlrha/site_hazard.json).",
-          "options": [
-            {
-              "value": "",
-              "label": "Code: 1.5 × the package's design spectrum (16.2.1.1)"
-            },
-            {
-              "value": "mcer",
-              "label": "Site-specific multi-period MCE_R (USGS)"
-            },
-            {
-              "value": "cs",
-              "label": "Conditional spectrum at T* (16.2.1.2)"
-            }
-          ]
+          "help": "Records in the NLRHA suite (default 11). The record set that ships with the module is a far-field ground-motion library and is information only — it is not an IS 1893 record selection rule; IS 1893 7.7 asks for spectrum-compatible time histories, which the scaling to the IS elastic target provides."
         },
         {
           "id": "records_set",
@@ -260,14 +202,14 @@
           "label": "Record library folder(s)",
           "arg": "--records-set",
           "placeholder": "C:\\records\\peer_set  D:\\pulse_records",
-          "help": "Folders of PEER .AT2 or CSV pairs, separated by spaces, added to (or replacing) the shipped FEMA P-695 far-field set. A folder without index.json is indexed on the fly (PEER _SearchResults.csv metadata is read when present)."
+          "help": "Folders of PEER .AT2 or CSV pairs, separated by spaces, added to (or replacing) the shipped far-field set. A folder without index.json is indexed on the fly (PEER _SearchResults.csv metadata is read when present)."
         },
         {
           "id": "pulse_fraction",
           "type": "number",
           "label": "Pulse-type share",
           "arg": "--pulse-fraction",
-          "help": "Share of the suite reserved for records flagged pulse in their index. Empty = the near-fault screen of the site hazard (else 0)."
+          "help": "Share of the suite reserved for records flagged pulse in their index. Empty = 0 (no near-fault screen on the IS path)."
         },
         {
           "id": "sf_bounds",
@@ -302,33 +244,11 @@
           ]
         },
         {
-          "id": "plasticity",
-          "type": "select",
-          "label": "Plasticity",
-          "arg": "--plasticity",
-          "default": "",
-          "help": "Product default: fibre for NSP, ModIMK for NLRHA.",
-          "options": [
-            {
-              "value": "",
-              "label": "Product default"
-            },
-            {
-              "value": "fibre",
-              "label": "Fibre"
-            },
-            {
-              "value": "imk",
-              "label": "ModIMK"
-            }
-          ]
-        },
-        {
           "id": "member_nseg",
           "type": "number",
           "label": "Member subdivisions",
           "arg": "--member-nseg",
-          "help": "Default 4 for fibre, 1 for ModIMK."
+          "help": "Default 4 for the fibre pushover, 1 for the NLRHA hinge model."
         },
         {
           "id": "tail",
@@ -383,7 +303,7 @@
         {
           "id": "no_criteria",
           "type": "checkbox",
-          "label": "Skip the §16.1.4 design criteria draft",
+          "label": "Skip the design-criteria draft",
           "arg": "--no-criteria",
           "arg_style": "flag-if-true"
         }
@@ -392,17 +312,17 @@
         {
           "label": "Four analyses",
           "path": "four_analyses.html",
-          "accent": "#ff8a3d"
+          "accent": "#7b93e8"
         },
         {
           "label": "Viewer bundle",
           "path": "steltic_viewer_bundle.html",
-          "accent": "#ffa15c"
+          "accent": "#ff9933"
         },
         {
           "label": "Pushover report",
           "path": "pushover/pushover_report.html",
-          "accent": "#ff8a3d"
+          "accent": "#7b93e8"
         },
         {
           "label": "NLRHA report",
@@ -420,84 +340,14 @@
           "accent": "#a89f92"
         },
         {
-          "label": "Design criteria §16.1.4",
+          "label": "Design criteria draft",
           "path": "design_criteria_16_1_4.html",
-          "accent": "#ffb070"
+          "accent": "#a5b6f0"
         },
         {
           "label": "Design criteria (.docx)",
           "path": "design_criteria_16_1_4.docx",
-          "accent": "#ffb070"
-        }
-      ]
-    },
-    {
-      "id": "review",
-      "title": "Review",
-      "kind": "form",
-      "blurb": "The model reads what the run measured — the Chapter 16 acceptance, the pushover mechanism, the DDM check, the §16.1.4 draft — looks up the governing clauses in the Query file manager's standards corpus, and writes an engineer's review with citations: what passed, what is marginal, what to change and why. Its reasoning and its text stream here as it works; the review lands in the project folder.",
-      "run": {
-        "kind": "cli",
-        "cwd": "{job_dir}",
-        "label": "Write the review",
-        "llm": true,
-        "env": {
-          "RAG_API_URL": "{server.steltic_grokbot}/query"
-        },
-        "command": [
-          "-m",
-          "snl",
-          "review",
-          "{job_dir}"
-        ]
-      },
-      "fields": [
-        {
-          "id": "job",
-          "type": "project",
-          "label": "Project",
-          "required": true
-        },
-        {
-          "id": "focus",
-          "type": "textarea",
-          "label": "Focus (optional)",
-          "arg": "--focus",
-          "rows": 4,
-          "placeholder": "e.g. Is the storey-3 drift concentration a mechanism problem or an accidental-torsion artefact? Would deeper columns in the lower two storeys be the cheaper fix?",
-          "help": "Anything you want the review to concentrate on. Empty = the standard review: acceptance, margins, mechanism, what to change."
-        },
-        {
-          "id": "no_standards",
-          "type": "checkbox",
-          "label": "Answer from the run alone (do not query the standards)",
-          "arg": "--no-standards",
-          "arg_style": "flag-if-true",
-          "help": "Normally the model grounds every clause it cites in the Query file manager's corpus. Tick to skip that (faster; citations then come from the model's memory and are flagged as unverified)."
-        },
-        {
-          "id": "max_searches",
-          "type": "number",
-          "label": "Standards searches, at most",
-          "arg": "--max-searches",
-          "default": 8
-        }
-      ],
-      "artifacts": [
-        {
-          "label": "Review",
-          "path": "review.html",
-          "accent": "#ffb070"
-        },
-        {
-          "label": "Review (.md)",
-          "path": "review.md",
-          "accent": "#ffb070"
-        },
-        {
-          "label": "Passages used",
-          "path": "review_transcript.json",
-          "accent": "#a89f92"
+          "accent": "#a5b6f0"
         }
       ]
     },
@@ -506,17 +356,17 @@
       "title": "Feedback",
       "kind": "embed",
       "src": "/?project={job}",
-      "blurb": "Once the Chapter 16 run is complete: what the analyses measured, three loops back to HR Steel (design drift to the measured response under §16.1.2, resize by system role, mechanism shaping through SCWB and panel zones), the re-design streamed live, the verification, and one button to make a verified candidate the design of record."
+      "blurb": "Once a run is complete: what the analyses measured, the re-design loops back to HR Steel (resize by system role, mechanism shaping through strong-column/weak-beam and panel zones per IS 800 12.11.3.2 / IS 18168 8.2), the re-design streamed live, the verification with the same analyses, and one button to make a verified candidate the design of record. The design-drift loop is not eligible on India jobs: IS 1893 has no drift-relief provision for nonlinear results. IS 1893 (Part 1):2016 provides no acceptance criteria for nonlinear analysis; results are for information."
     },
     {
       "id": "hazard",
-      "title": "Site hazard",
+      "title": "IS 1893 spectrum",
       "kind": "form",
-      "blurb": "Site-specific hazard for the Chapter 16 suite: the USGS ASCE 7-22 multi-period MCE_R spectrum, the USGS NSHM disaggregation at the conditioning period (mean M, R, ε and the contributing faults), conditional spectra, a near-fault screen with the pulse share it implies. Writes nlrha/site_hazard.json + site_hazard.html; then choose a site-specific target on the Run tab. Needs internet access to earthquake.usgs.gov (about a minute).",
+      "blurb": "The elastic target spectra for the NLRHA suite from IS 1893 (Part 1):2016 + Amd 1/2: DBE = (Z/2)·I·Sa/g and MCE = Z·I·Sa/g for the site's zone (Table 3), soil type (6.4.2) and importance factor (Table 8), never divided by R. Writes nlrha/site_hazard.json (the IS path writes no HTML page; the Run tab and the four-analyses sheet read the JSON). Values default to the package's cfg; set them here to override. Runs offline — no hazard service is called.",
       "run": {
         "kind": "cli",
         "cwd": "{job_dir}",
-        "label": "Fetch site hazard",
+        "label": "Build IS 1893 spectrum",
         "command": [
           "-m",
           "nlrha",
@@ -532,66 +382,39 @@
           "required": true
         },
         {
-          "id": "lat",
-          "type": "number",
-          "label": "Latitude",
-          "arg": "--lat",
-          "required": true
-        },
-        {
-          "id": "lon",
-          "type": "number",
-          "label": "Longitude",
-          "arg": "--lon",
-          "required": true,
-          "help": "Negative west of Greenwich (e.g. -118.25)."
-        },
-        {
-          "id": "site_class",
+          "id": "zone",
           "type": "select",
-          "label": "Site class",
-          "arg": "--site-class",
-          "default": "D",
+          "label": "Seismic zone (IS 1893 Fig. 1 / Annex E)",
+          "arg": "--zone",
+          "default": "",
           "options": [
             {
-              "value": "A",
-              "label": "A"
+              "value": "",
+              "label": "From the package"
             },
             {
-              "value": "B",
-              "label": "B"
+              "value": "II",
+              "label": "II (Z = 0.10)"
             },
             {
-              "value": "BC",
-              "label": "BC"
+              "value": "III",
+              "label": "III (Z = 0.16)"
             },
             {
-              "value": "C",
-              "label": "C"
+              "value": "IV",
+              "label": "IV (Z = 0.24)"
             },
             {
-              "value": "CD",
-              "label": "CD"
-            },
-            {
-              "value": "D",
-              "label": "D"
-            },
-            {
-              "value": "DE",
-              "label": "DE"
-            },
-            {
-              "value": "E",
-              "label": "E"
+              "value": "V",
+              "label": "V (Z = 0.36)"
             }
           ]
         },
         {
-          "id": "risk_category",
+          "id": "soil_type",
           "type": "select",
-          "label": "Risk category",
-          "arg": "--risk-category",
+          "label": "Soil type (IS 1893 6.4.2)",
+          "arg": "--soil-type",
           "default": "",
           "options": [
             {
@@ -600,43 +423,38 @@
             },
             {
               "value": "I",
-              "label": "I"
+              "label": "Type I — rock or hard soil"
             },
             {
               "value": "II",
-              "label": "II"
+              "label": "Type II — medium or stiff soil"
             },
             {
               "value": "III",
-              "label": "III"
-            },
-            {
-              "value": "IV",
-              "label": "IV"
+              "label": "Type III — soft soil"
             }
           ]
         },
         {
-          "id": "vs30",
+          "id": "importance",
           "type": "number",
-          "label": "Vs30 (m/s)",
-          "arg": "--vs30",
-          "help": "For the disaggregation. Empty = the USGS value for the site class."
+          "label": "Importance factor I (IS 1893 Table 8)",
+          "arg": "--importance",
+          "help": "1.0, 1.2 or 1.5. Empty = the package's value."
         },
         {
-          "id": "return_period",
+          "id": "R_factor",
           "type": "number",
-          "label": "Disaggregation return period (yr)",
-          "arg": "--return-period",
-          "default": 2475
+          "label": "Response reduction factor R (IS 1893 Table 9)",
+          "arg": "--R-factor",
+          "help": "Recorded for the base-shear comparison (VB); the target spectrum is never divided by it. Empty = the package's value."
         },
         {
-          "id": "cs_period",
-          "type": "text",
-          "label": "Conditioning period(s) T* (s)",
-          "arg": "--cs-period",
-          "placeholder": "1.0 0.3",
-          "help": "Empty = the longer first-mode period of the hinge model. Several, separated by spaces, give several conditional spectra (16.2.1.2 envelope)."
+          "id": "Z",
+          "type": "number",
+          "label": "Zone factor Z override",
+          "arg": "--Z",
+          "help": "Only when the site is not tabulated (a map reading); cite the source in the brief. Empty = Table 3 for the zone."
         },
         {
           "id": "t1",
@@ -648,17 +466,12 @@
         {
           "id": "params",
           "type": "file",
-          "label": "Job hinge parameters",
+          "label": "Hinge parameters (optional)",
           "accept": ".json",
           "arg": "--params"
         }
       ],
       "artifacts": [
-        {
-          "label": "Site hazard",
-          "path": "nlrha/site_hazard.html",
-          "accent": "#3fc1a0"
-        },
         {
           "label": "site_hazard.json",
           "path": "nlrha/site_hazard.json",
@@ -670,7 +483,7 @@
       "id": "criteria",
       "title": "Design criteria",
       "kind": "form",
-      "blurb": "Draft the ASCE 7-22 §16.1.4 design criteria document from the package and whatever analyses exist (site hazard, selected suite, results): hazard, ground motions, modelling, acceptance criteria, the linear basis, the §16.5 review scope, open items, the retrieval log. Word (.docx) for mark-up and HTML for the hub. Also written at the end of every Run.",
+      "blurb": "Draft the design-criteria document for the nonlinear study from the package and whatever analyses exist (IS 1893 spectrum, selected suite, results): governing IS documents, hazard, ground motions, modelling, the linear design basis, open items, the retrieval log. Word (.docx) for mark-up and HTML for the hub. Also written at the end of every Run. IS 1893 (Part 1):2016 provides no acceptance criteria for nonlinear analysis; results are for information.",
       "run": {
         "kind": "cli",
         "cwd": "{job_dir}",
@@ -704,56 +517,27 @@
         {
           "id": "reviewer",
           "type": "text",
-          "label": "Independent reviewer (§16.5)",
+          "label": "Independent reviewer",
           "arg": "--reviewer"
         },
         {
           "id": "params",
           "type": "file",
-          "label": "Job hinge parameters",
+          "label": "Hinge parameters (optional)",
           "accept": ".json",
           "arg": "--params"
-        },
-        {
-          "id": "risk_category",
-          "type": "select",
-          "label": "Risk category",
-          "arg": "--risk-category",
-          "default": "",
-          "options": [
-            {
-              "value": "",
-              "label": "From the package"
-            },
-            {
-              "value": "I",
-              "label": "I"
-            },
-            {
-              "value": "II",
-              "label": "II"
-            },
-            {
-              "value": "III",
-              "label": "III"
-            },
-            {
-              "value": "IV",
-              "label": "IV"
-            }
-          ]
         }
       ],
       "artifacts": [
         {
-          "label": "Design criteria §16.1.4",
+          "label": "Design criteria draft",
           "path": "design_criteria_16_1_4.html",
-          "accent": "#ffb070"
+          "accent": "#a5b6f0"
         },
         {
           "label": "Design criteria (.docx)",
           "path": "design_criteria_16_1_4.docx",
-          "accent": "#ffb070"
+          "accent": "#a5b6f0"
         }
       ]
     },
@@ -761,7 +545,7 @@
       "id": "inspect",
       "title": "Inspect",
       "kind": "form",
-      "blurb": "Read the design basis out of a package without running anything. The package is copied into the project folder first.",
+      "blurb": "Read the design basis (system, R, zone, Z, I, soil type, VB, load_plan) out of a package without running anything. The package is copied into the project folder first.",
       "run": {
         "kind": "cli",
         "cwd": "{job_dir}",
@@ -772,7 +556,7 @@
             "to": "{job_dir}",
             "required": true,
             "label": "design package",
-            "missing": "No design package for this project: run HR Steel on it first, or choose the .zip HR Steel produced."
+            "missing": "No design package for this project: run HR Steel (IS 800) on it first, or choose the .zip HR Steel produced."
           }
         ],
         "command": [
@@ -794,8 +578,8 @@
           "type": "file",
           "label": "Design package",
           "accept": ".zip",
-          "default": "{out.steltic}",
-          "placeholder": "this project's HR Steel design (automatic)"
+          "default": "{out.steltic_india}",
+          "placeholder": "this project's HR Steel (IS 800) design (automatic)"
         }
       ]
     },
@@ -803,7 +587,7 @@
       "id": "compare",
       "title": "Compare",
       "kind": "form",
-      "blurb": "Rebuild four_analyses.html and the viewer hub from whatever outputs already exist. No analysis runs.",
+      "blurb": "Rebuild four_analyses.html and the viewer hub from whatever outputs already exist. No analysis runs. IS 1893 (Part 1):2016 provides no acceptance criteria for nonlinear analysis; results are for information.",
       "run": {
         "kind": "cli",
         "cwd": "{job_dir}",
@@ -827,12 +611,12 @@
         {
           "label": "Four analyses",
           "path": "four_analyses.html",
-          "accent": "#ff8a3d"
+          "accent": "#7b93e8"
         },
         {
           "label": "Viewer bundle",
           "path": "steltic_viewer_bundle.html",
-          "accent": "#ffa15c"
+          "accent": "#ff9933"
         },
         {
           "label": "Summary JSON",
@@ -845,7 +629,7 @@
       "id": "mesh",
       "title": "Mesh convergence",
       "kind": "form",
-      "blurb": "Fibre mesh ladder with a relative stop band (product default 10%). Runs on the design package already in this project folder.",
+      "blurb": "Fibre mesh ladder with a relative stop band (product default 10%). Runs on the design package already in this project folder. Informative, like every result of this module.",
       "run": {
         "kind": "cli",
         "cwd": "{job_dir}",
@@ -858,7 +642,7 @@
           "--out",
           "{job_dir}",
           "--steltic-engine",
-          "{need.steltic}/steel_engine"
+          "{need.steltic_india}/steel_engine"
         ]
       },
       "fields": [
@@ -896,7 +680,7 @@
         {
           "id": "params",
           "type": "file",
-          "label": "Job hinge parameters",
+          "label": "Hinge parameters (optional)",
           "accept": ".json",
           "arg": "--params"
         },
@@ -913,64 +697,6 @@
           "label": "Max rungs",
           "arg": "--max-rungs",
           "default": 4
-        },
-        {
-          "id": "risk_category",
-          "type": "select",
-          "label": "Risk category",
-          "arg": "--risk-category",
-          "default": "",
-          "options": [
-            {
-              "value": "",
-              "label": "From the package"
-            },
-            {
-              "value": "I",
-              "label": "I"
-            },
-            {
-              "value": "II",
-              "label": "II"
-            },
-            {
-              "value": "III",
-              "label": "III"
-            },
-            {
-              "value": "IV",
-              "label": "IV"
-            }
-          ]
-        },
-        {
-          "id": "site_class",
-          "type": "select",
-          "label": "Site class",
-          "arg": "--site-class",
-          "default": "D",
-          "options": [
-            {
-              "value": "A",
-              "label": "A"
-            },
-            {
-              "value": "B",
-              "label": "B"
-            },
-            {
-              "value": "C",
-              "label": "C"
-            },
-            {
-              "value": "D",
-              "label": "D"
-            },
-            {
-              "value": "E",
-              "label": "E"
-            }
-          ]
         },
         {
           "id": "n_records",
@@ -1013,7 +739,7 @@
       "id": "viewers",
       "title": "Viewers",
       "kind": "viewers",
-      "blurb": "Steltic · Pushover · NLRHA · DDM — greyed where the sibling file is not in this project yet."
+      "blurb": "HR Steel · Pushover · NLRHA · DDM — greyed where the sibling file is not in this project yet."
     },
     {
       "id": "files",
@@ -1034,7 +760,7 @@
     "health": "/healthz",
     "cwd": "{module_dir}",
     "requires": [
-      "steltic"
+      "steltic_india"
     ]
   }
 }

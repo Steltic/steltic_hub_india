@@ -1,0 +1,367 @@
+{
+  "schema": 1,
+  "id": "steltic_CFS_india",
+  "name": "CFS (IS 801) + IS 800 braced frames",
+  "blurb": "Cold-formed steel to IS 801:1975 (working stress, IS 811 sections) for studs, tracks, joists, purlins and girts, with the lateral system as hot-rolled IS 800 Section 12 braced frames (OCBF in Zone II, SCBF/EBF in Zones III–V) or SMF portals; one all-CFS elastic portal (R = 1.0). Loads to IS 875 (Parts 1–5), seismic to IS 1893 (Part 1):2016 + Amd 1/2.",
+  "accent": "#3cb043",
+  "order": 20,
+  "homepage": "https://github.com/Steltic/steltic_CFS_india",
+  "source": {
+    "url": "https://github.com/Steltic/steltic_CFS_india",
+    "branch": "main"
+  },
+  "env": {
+    "python": "3.12",
+    "install": [
+      "-e",
+      "."
+    ]
+  },
+  "env_vars": {
+    "DATA_DIR": "{data_dir}/modules_data/steltic_CFS_india",
+    "DEMO": "0",
+    "RAG_API_URL": "{server.engineering_rag_india}/query",
+    "RAG_ALIASES_FILE": "{data_dir}/grokbot/indexes/aliases.json",
+    "INDIA_CORPUS_ROOT": "{data_dir}/grokbot"
+  },
+  "credentials": {
+    "path": "/api/creds",
+    "method": "POST"
+  },
+  "server": {
+    "command": [
+      "-m",
+      "uvicorn",
+      "steltic.main:app",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "{port}"
+    ],
+    "health": "/healthz",
+    "cwd": "{module_dir}",
+    "requires": [
+      "engineering_rag_india"
+    ]
+  },
+  "output": {
+    "root": "{data_dir}/modules_data/steltic_CFS_india/sessions/local/jobs/{job}"
+  },
+  "viewers": [
+    {
+      "id": "steltic",
+      "label": "CFS model",
+      "accent": "#3cb043",
+      "path": "viewer_3d.html"
+    }
+  ],
+  "tabs": [
+    {
+      "id": "design",
+      "title": "Design",
+      "kind": "form",
+      "blurb": "Paste a brief and the agent writes cfg.py (units N, mm, MPa; kN/m² for area loads), retrieves the loads live from IS 875 / IS 1893 into load_plan.json, runs the engine, fills design/calc_package_cfs.json (design_status COMPLETE / INCOMPLETE with reasons) and delivers report.html + viewer_3d.html + STATUS.md + EOR_inputs.json. CFS members are designed to IS 801 working stress (F = 0.60 Fy; +33⅓ % only for combinations with wind or earthquake); the braced frames to IS 800 Section 12. A new run on a project that already holds a design archives the old one beside it (<project>__<timestamp>). Clauses are retrieved from the IS corpus on this PC (the IS corpus module) — without it the agent cites the standards from memory and flags every value to verify.",
+      "run": {
+        "kind": "http",
+        "method": "POST",
+        "path": "/api/run",
+        "stream": "sse",
+        "label": "Design building",
+        "cancel": {
+          "method": "POST",
+          "path": "/api/stop",
+          "body": {
+            "building": "{job}"
+          }
+        },
+        "body": {
+          "building": "{job}",
+          "brief": "{f.brief}",
+          "analysis_fidelity": "{f.analysis_fidelity}",
+          "resume": false
+        }
+      },
+      "fields": [
+        {
+          "id": "job",
+          "type": "project",
+          "label": "Project",
+          "required": true,
+          "help": "Names the folder every module writes into for this building."
+        },
+        {
+          "id": "examples",
+          "type": "select",
+          "label": "Load an example brief",
+          "help": "The 15 India briefs (IN_CFS_Ex1 … IN_CFS_Ex15): IS 800 braced frames and SMF portals with IS 801 secondary members, seismic zones II–V, cyclone-belt wind, snow, podiums and irregular plans. Edit it if you like, then run.",
+          "fills": {
+            "path": "/api/example/{value}",
+            "key": "brief",
+            "target": "brief"
+          },
+          "options": [
+            {
+              "value": "",
+              "label": "Example briefs…"
+            },
+            {
+              "value": "in1",
+              "label": "IN_CFS_Ex1 — SCBF + IS 801 studs/joists, 4 levels, New Delhi (Zone IV)"
+            },
+            {
+              "value": "in2",
+              "label": "IN_CFS_Ex2 — Hot-rolled SMF portal + CFS purlins/girts, Chennai (cyclone belt)"
+            },
+            {
+              "value": "in3",
+              "label": "IN_CFS_Ex3 — SCBF, 5 levels, Mumbai (coastal wind)"
+            },
+            {
+              "value": "in4",
+              "label": "IN_CFS_Ex4 — OCBF, 6 levels, student residence, Bengaluru (Zone II)"
+            },
+            {
+              "value": "in5",
+              "label": "IN_CFS_Ex5 — All-CFS portal + mezzanine, elastic R = 1.0, Hyderabad"
+            },
+            {
+              "value": "in6",
+              "label": "IN_CFS_Ex6 — SCBF, 5 levels, L-plan, Pune"
+            },
+            {
+              "value": "in7",
+              "label": "IN_CFS_Ex7 — SCBF, 6 levels, Z-plan hotel, Surat (cyclone belt)"
+            },
+            {
+              "value": "in8",
+              "label": "IN_CFS_Ex8 — SCBF, 4 levels, T-plan, Ahmedabad"
+            },
+            {
+              "value": "in9",
+              "label": "IN_CFS_Ex9 — SCBF continuous through a 2-storey podium, U-plan, Noida"
+            },
+            {
+              "value": "in10",
+              "label": "IN_CFS_Ex10 — OCBF high-bay + 2-storey office wing, Nagpur (Zone II)"
+            },
+            {
+              "value": "in11",
+              "label": "IN_CFS_Ex11 — OCBF, 3 levels, L-plan motel, Visakhapatnam (cyclone belt)"
+            },
+            {
+              "value": "in12",
+              "label": "IN_CFS_Ex12 — SCBF, 8 levels, cruciform plan, Kolkata (RSA)"
+            },
+            {
+              "value": "in13",
+              "label": "IN_CFS_Ex13 — SCBF, 4 levels, roof step, Lucknow"
+            },
+            {
+              "value": "in14",
+              "label": "IN_CFS_Ex14 — SCBF clinic, split-level site, Coimbatore (I = 1.2)"
+            },
+            {
+              "value": "in15",
+              "label": "IN_CFS_Ex15 — Hot-rolled SMF portal + EBF longitudinal, cold storage, snow, Srinagar (Zone V)"
+            }
+          ]
+        },
+        {
+          "id": "brief",
+          "type": "textarea",
+          "rows": 12,
+          "label": "Design brief",
+          "required": true,
+          "placeholder": "4-storey residential, IS 801 CFS stud walls and joists, plan 12 m × 30 m, storeys 3.0 m.\nLateral: hot-rolled IS 800 SCBF (IS 808 sections) in both directions. Floor dead 2.0 kN/m² / imposed 2.0 kN/m²; roof dead 1.5 / imposed 0.75 kN/m².\nSite: New Delhi — IS 1893 Zone IV, soil Type II, residential (I = 1.0). Wind: IS 875-3 Vb 47 m/s, terrain category 3. Steel IS 2062 E250; CFS Fy 240 MPa.",
+          "help": "Storeys, bays and spacings (m), loads (kN/m²), site (IS 1893 zone / Annex E town, soil type, occupancy for I; IS 875-3 Vb or Annex A town, terrain category, cyclone belt), lateral system and R, steel grades (IS 2062 for the frames, Fy for the CFS members)."
+        },
+        {
+          "id": "analysis_fidelity",
+          "type": "select",
+          "label": "Analysis fidelity",
+          "default": "auto",
+          "help": "How faithfully the analysis model captures thin-wall section softening (stiffness only — strength checks are always the full IS 801 set). Auto lets the agent pick the tier for your structure; the preflight check warns if a chosen tier looks wrong for it.",
+          "options": [
+            {
+              "value": "auto",
+              "label": "Auto (recommended)"
+            },
+            {
+              "value": "0",
+              "label": "Tier 0 — Standard (stud-wall buildings on IS 800 braced frames)"
+            },
+            {
+              "value": "1",
+              "label": "Tier 1 — Thin-walled members (portals, canopies)"
+            },
+            {
+              "value": "2",
+              "label": "Tier 2 — High fidelity (slender/torsion-critical)"
+            }
+          ]
+        },
+        {
+          "id": "images",
+          "type": "attachments",
+          "label": "Upload files",
+          "text_target": "brief",
+          "accept": ".txt,.md,.markdown,.text,.pdf,.png,.jpg,.jpeg,.gif,.webp",
+          "help": "Text / Markdown is read into the brief; a text-based PDF has its text extracted into the brief (scanned pages have no text layer); images are attached as references and sent to the model — the design agent uses the first three, and not every LLM can read images."
+        }
+      ],
+      "artifacts": [
+        {
+          "label": "Report",
+          "path": "report.html",
+          "accent": "#3cb043"
+        },
+        {
+          "label": "3D model",
+          "path": "viewer_3d.html",
+          "accent": "#3cb043"
+        },
+        {
+          "label": "STATUS.md",
+          "path": "STATUS.md",
+          "accent": "#a89f92"
+        },
+        {
+          "label": "Calc package",
+          "path": "design/calc_package_cfs.json",
+          "accent": "#a89f92"
+        },
+        {
+          "label": "Load plan",
+          "path": "load_plan.json",
+          "accent": "#a89f92"
+        },
+        {
+          "label": "EOR inputs",
+          "path": "EOR_inputs.json",
+          "accent": "#a89f92"
+        }
+      ],
+      "links": [
+        {
+          "label": "Download package (.zip)",
+          "path": "/api/download/{job}",
+          "help": "Self-contained report, the model scripts, design/ and the resumable conversation — the file the Nonlinear module reads."
+        },
+        {
+          "label": "Which fidelity tier? ↗",
+          "path": "/static/analysis_fidelity_explainer.md"
+        }
+      ]
+    },
+    {
+      "id": "continue",
+      "title": "Continue",
+      "kind": "form",
+      "blurb": "Resume a paused or stopped design, or iterate on a finished one with new instructions. The agent keeps its full conversation, so a follow-up like “use 1.6 mm lipped-channel studs (IS 811) at 400 mm and rerun” continues THIS design.",
+      "run": {
+        "kind": "http",
+        "method": "POST",
+        "path": "/api/run",
+        "stream": "sse",
+        "label": "Continue",
+        "cancel": {
+          "method": "POST",
+          "path": "/api/stop",
+          "body": {
+            "building": "{job}"
+          }
+        },
+        "body": {
+          "building": "{job}",
+          "brief": "{f.brief}",
+          "resume": true
+        },
+        "continues": "design"
+      },
+      "fields": [
+        {
+          "id": "job",
+          "type": "project",
+          "label": "Project",
+          "required": true
+        },
+        {
+          "id": "brief",
+          "type": "textarea",
+          "rows": 6,
+          "label": "Follow-up instructions (optional)",
+          "placeholder": "e.g. the level-3 joists exceed the IS 801 6.1 allowable bending stress — re-check and optimise.\nLeave empty to simply resume where the run stopped."
+        },
+        {
+          "id": "images",
+          "type": "attachments",
+          "label": "Upload files",
+          "text_target": "brief",
+          "accept": ".txt,.md,.markdown,.text,.pdf,.png,.jpg,.jpeg,.gif,.webp",
+          "help": "Text / Markdown is read into the brief; a text-based PDF has its text extracted into the brief (scanned pages have no text layer); images are attached as references and sent to the model — the design agent uses the first three, and not every LLM can read images."
+        }
+      ],
+      "artifacts": [
+        {
+          "label": "Report",
+          "path": "report.html",
+          "accent": "#3cb043"
+        },
+        {
+          "label": "3D model",
+          "path": "viewer_3d.html",
+          "accent": "#3cb043"
+        },
+        {
+          "label": "STATUS.md",
+          "path": "STATUS.md",
+          "accent": "#a89f92"
+        },
+        {
+          "label": "Calc package",
+          "path": "design/calc_package_cfs.json",
+          "accent": "#a89f92"
+        },
+        {
+          "label": "Load plan",
+          "path": "load_plan.json",
+          "accent": "#a89f92"
+        },
+        {
+          "label": "EOR inputs",
+          "path": "EOR_inputs.json",
+          "accent": "#a89f92"
+        }
+      ],
+      "links": [
+        {
+          "label": "Download package (.zip)",
+          "path": "/api/download/{job}",
+          "help": "Self-contained report, the model scripts, design/ and the resumable conversation — the file the Nonlinear module reads."
+        },
+        {
+          "label": "Which fidelity tier? ↗",
+          "path": "/static/analysis_fidelity_explainer.md"
+        }
+      ]
+    },
+    {
+      "id": "viewers",
+      "title": "Viewers",
+      "kind": "viewers",
+      "blurb": "The interactive 3D model this module produced for the active project."
+    },
+    {
+      "id": "files",
+      "title": "Files",
+      "kind": "files"
+    },
+    {
+      "id": "app",
+      "title": "Full UI",
+      "kind": "embed",
+      "src": "/",
+      "blurb": "The module's own interface, served by its own server. Always current — a module update changes this tab with no hub release."
+    }
+  ]
+}
