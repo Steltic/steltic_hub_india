@@ -136,11 +136,11 @@
             },
             {
               "value": "in9",
-              "label": "IN_Ex9 — SCBF (perimeter braces), 12 levels, T-plan, Guwahati (Zone V)"
+              "label": "IN_Ex9 — EBF (IS 18168: Zone V), 12 levels, T-plan, Guwahati"
             },
             {
               "value": "in10",
-              "label": "IN_Ex10 — SMF perimeter + interior SCBF, 18 levels, slender, Noida"
+              "label": "IN_Ex10 — SCBF (sole SFRS, IS 18168 1.3), 18 levels, slender, Noida (Zone IV)"
             },
             {
               "value": "in11",
