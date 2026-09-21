@@ -29,7 +29,7 @@ def available() -> bool:
 def _headers() -> dict:
     h = {"Content-Type": "application/json", "Authorization": f"Bearer {_CREDS.get('api_key', '')}"}
     if "openrouter" in (_CREDS.get("base_url") or ""):
-        h["HTTP-Referer"] = "https://github.com/Steltic/steltic-hub"; h["X-Title"] = "Steltic design variations"
+        h["HTTP-Referer"] = "https://github.com/Steltic/steltic_hub_india"; h["X-Title"] = "Steltic India design variations"
     return h
 
 

@@ -3,7 +3,7 @@
   --bg:#12100d; --bar:#0e0c0a; --panel:#1a1712; --panel2:#221e18;
   --line:#3a342c; --line2:#52483c;
   --ink:#f0ebe4; --dim:#a89f92; --dimmer:#6e665c;
-  --accent:#ffc078; --ok:#4dcb9a; --warn:#e8b04a; --bad:#e8745e; --info:#ffb070;
+  --accent:#ffb84d; --ok:#4dcb9a; --warn:#e8b04a; --bad:#e8745e; --info:#ffb070;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
 *{margin:0;padding:0;box-sizing:border-box}

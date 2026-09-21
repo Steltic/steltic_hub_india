@@ -45,7 +45,7 @@ function closeModal() { $('#modal').hidden = true; }
 const fmt = {
   num(v, d = 2) { if (v === null || v === undefined || v === '' || Number.isNaN(v)) return '—'; if (typeof v !== 'number') return String(v);
     if (Math.abs(v) >= 1e6) return (v / 1e6).toFixed(2) + ' M'; if (Math.abs(v) >= 10000) return Math.round(v).toLocaleString(); return Number.isInteger(v) ? String(v) : v.toFixed(d); },
-  money(v) { if (v === null || v === undefined) return '—'; return '$' + (Math.abs(v) >= 1e6 ? (v / 1e6).toFixed(2) + ' M' : Math.round(v).toLocaleString()); },
+  money(v) { if (v === null || v === undefined) return '—'; return '₹' + (Math.abs(v) >= 1e7 ? (v / 1e7).toFixed(2) + ' cr' : Math.abs(v) >= 1e5 ? (v / 1e5).toFixed(2) + ' lakh' : Math.round(v).toLocaleString('en-IN')); },
   when(t) { return t ? new Date(t * 1000).toLocaleString() : ''; },
 };
 const STATUS = { pending: ['not designed', 'dim'], running: ['designing…', 'run'], done: ['done', 'ok'], failed: ['failed', 'bad'],
@@ -60,8 +60,8 @@ async function load() {
   if (S.rates === null) S.rates = { ...S.lib.default_rates, ...(S.proj.scoring.rates || {}) };
   if (S.scoreText === null) S.scoreText = S.proj.scoring.source_text || '';
   if (!S.sel.size) (S.proj.selection.ids || []).forEach(i => S.sel.add(i));
-  if (!S.cols) S.cols = new Set(['modelled_cost', 'net_value', 'steel_tons', 'steel_psf', 'drift_utilisation', 'drift_margin',
-    'drift_concentration_ratio', 'n_moment_conn', 'dc_max', 'T1_s', 'V_kip']);
+  if (!S.cols) S.cols = new Set(['modelled_cost', 'net_value', 'steel_t', 'steel_kg_m2', 'drift_utilisation', 'drift_margin',
+    'drift_concentration_ratio', 'n_moment_conn', 'dc_max', 'n_open_reasons', 'T1_s', 'VB_kN', 'R']);
   if (S.step === 1 && S.proj.plan.length) S.step = S.proj.rows.some(r => r.status === 'done') ? (S.proj.scoring.scored_at ? 5 : 4) : 3;
   if (S.proj.running) attachEvents();
   header(); render();
@@ -97,7 +97,7 @@ function render() {
 
 /* ---------------------------------------------------------------- 1. base brief */
 function paneBase(main) {
-  const ta = el('textarea', { style: 'min-height:260px', placeholder: 'The building brief every variation starts from — the same text you would give HR Steel.' });
+  const ta = el('textarea', { style: 'min-height:260px', placeholder: 'The building brief every variation starts from — the same text you would give HR Steel (IS 800): storeys, bays (m), loads (kN/m²), IS 1893 zone / soil / occupancy, IS 875-3 Vb, lateral system and R, steel grade.' });
   ta.value = S.proj.base_brief || '';
   const save = async () => {
     try { S.proj = await api(`/api/project/${enc(S.project)}/base`, { method: 'POST', body: { brief: ta.value, source: 'typed' } }); toast('base brief saved', 'ok'); S.step = 2; render(); }
@@ -276,13 +276,14 @@ function paintLog() {
 /* ---------------------------------------------------------------- 4. score */
 const RULES = [
   ['require_done', 'Design finished (status DONE)'],
-  ['require_checks_pass', 'Every code check passing (no D/C > 1.0, no failing checks)'],
-  ['drift_utilisation_max', 'Drift utilisation ≤', 'num'],
-  ['smf_share_min_pct', 'Moment-frame share ≥ (%, dual systems only)', 'num'],
-  ['require_rho_ax_applied', 'ρ and Ax applied (both stated in the package)'],
-  ['no_extreme_torsion', 'No Type 1b extreme torsional irregularity'],
+  ['require_checks_pass', 'Every IS 800 check passing (no D/C > 1.0, no failing checks)'],
+  ['require_design_complete', 'design_status COMPLETE (0 open reasons — the India gate authority)'],
+  ['drift_utilisation_max', 'Storey drift utilisation (IS 1893 7.11.1.1, 0.004 h) ≤', 'num'],
+  ['smf_share_min_pct', 'Moment-frame share ≥ (%, mixed moment-frame + braced systems only)', 'num'],
+  ['require_gates_pass', 'Every analysis gate ok (RSA scaling, modal mass, stability, drift, wind deflection …)'],
+  ['no_torsional_irregularity', 'Not torsionally irregular (IS 1893 Table 5(i), Amd 2)'],
   ['wind_comfort_max_mg', 'Wind comfort ≤ (milli-g, when reported)', 'num'],
-  ['representable_only', 'Representable in the nonlinear tools (SMF, SCBF, dual SMF+SCBF, R=3 X-braced)'],
+  ['representable_only', 'Representable in the Nonlinear (SNL-IN) tools (an IS 800 Section 12 frame type: SMRF, SCBF, EBF, OMRF, OCBF)'],
 ];
 function rulesEditor() {
   return el('div', { class: 'rules' }, ...RULES.map(([k, label, kind]) => {
@@ -300,11 +301,12 @@ function rulesEditor() {
 function criteriaPills(rules) {
   const r = rules || S.rules; const out = [];
   if (r.require_done) out.push('status DONE');
-  if (r.require_checks_pass) out.push('every code check passing');
+  if (r.require_checks_pass) out.push('every IS 800 check passing');
+  if (r.require_design_complete) out.push('design_status COMPLETE');
   if (r.drift_utilisation_max != null) out.push(`drift utilisation ≤ ${r.drift_utilisation_max}`);
-  if (r.smf_share_min_pct != null) out.push(`SMF share ≥ ${r.smf_share_min_pct} % (dual systems)`);
-  if (r.require_rho_ax_applied) out.push('ρ and Ax applied');
-  if (r.no_extreme_torsion) out.push('no Type 1b');
+  if (r.smf_share_min_pct != null) out.push(`moment-frame share ≥ ${r.smf_share_min_pct} % (mixed systems)`);
+  if (r.require_gates_pass) out.push('analysis gates ok');
+  if (r.no_torsional_irregularity) out.push('not torsionally irregular');
   if (r.wind_comfort_max_mg != null) out.push(`wind comfort ≤ ${r.wind_comfort_max_mg} mg`);
   if (r.representable_only) out.push('representable in nonlinear tools');
   return el('div', { class: 'crit' }, ...out.map(t => el('span', { class: 'pill ok' }, t)));
@@ -317,7 +319,7 @@ function paneScore(main) {
   ta.value = S.scoreText || ''; ta.oninput = () => { S.scoreText = ta.value; };
   const ratesBox = el('div', { class: 'row' }, ...Object.entries(S.lib.default_rates).map(([k, d]) => {
     const inp = el('input', { type: 'number', step: 'any', value: S.rates[k] ?? d, onchange: e => { S.rates[k] = Number(e.target.value); } });
-    return el('label', { class: 'rule' }, el('span', {}, { steel_per_ton: '$ per ton of steel', per_moment_conn: '$ per moment connection', per_brace: '$ per brace', revenue_per_sf: '$ revenue per sf' }[k] || k), inp);
+    return el('label', { class: 'rule' }, el('span', {}, { steel_per_t: '₹ per tonne of steel (fabricated, erected)', per_moment_conn: '₹ per moment connection', per_brace: '₹ per brace', revenue_per_m2: '₹ revenue per m² of floor area' }[k] || k), inp);
   }));
   const apply = el('button', { class: 'primary' }, 'Apply scoring and rank');
   const out = el('div');
@@ -345,7 +347,7 @@ function paneScore(main) {
       el('p', { class: 'hint', style: 'margin-top:6px' }, 'Weights: 0.35 cost · 0.20 drift margin · 0.15 drift concentration · 0.15 net value · 0.15 moment connections. Each term is 0–1, higher is better; *_max is taken over the eligible variations.'),
       el('h3', {}, 'Your scoring requirements'), ta,
       el('h3', {}, 'Cost model'), ratesBox,
-      el('p', { class: 'hint' }, 'modelled_cost = steel tons × rate + moment connections × rate + braces × rate; revenue_proxy = gross floor area × rate; net_value = revenue − cost.'),
+      el('p', { class: 'hint' }, 'modelled_cost = steel tonnes × rate + moment connections × rate + braces × rate; revenue_proxy = gross floor area (m²) × rate; net_value = revenue − cost. Rates in INR are placeholders — edit them above.'),
       el('div', { class: 'row', style: 'margin-top:12px' }, apply,
         p.scoring.scored_at ? el('span', { class: 'hint' }, `last applied ${fmt.when(p.scoring.scored_at)}`) : null)),
     out,

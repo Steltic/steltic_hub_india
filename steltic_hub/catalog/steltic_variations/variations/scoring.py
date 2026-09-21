@@ -9,6 +9,9 @@ The score is a formula over the metrics of each variation. The default is the st
 Any metric name may be used; `<name>_max` / `<name>_min` are taken over the eligible rows. The
 expression is evaluated with a small AST walker -- names, numbers, + - * / ** unary minus, min,
 max, abs, sqrt, parentheses -- never with eval().
+
+India edition: the metrics are SI (t, kg/m², m², kN, m/s) and read from the IS 800 package
+(design_status, IS 1893 drift table, Table 5/6 irregularities, VB / W); the cost rates are in INR.
 """
 from __future__ import annotations
 import ast, math, re
@@ -19,32 +22,37 @@ DEFAULT_EQUATION = ("S = 0.35*(1 - modelled_cost/modelled_cost_max) + 0.20*drift
 
 METRICS = [
     # (name, description, unit)
-    ("modelled_cost", "steel tonnage x rate + moment connections x rate + braces x rate", "$"),
-    ("revenue_proxy", "gross floor area x revenue rate", "$"),
-    ("net_value", "revenue_proxy - modelled_cost", "$"),
-    ("steel_tons", "structural steel from the member schedule", "ton"),
-    ("steel_psf", "steel weight per square foot of gross floor area", "psf"),
-    ("floor_area_sf", "gross floor area, all levels", "sf"),
-    ("drift_utilisation", "max design story drift / allowable", "-"),
+    ("modelled_cost", "steel tonnage x rate + moment connections x rate + braces x rate", "INR"),
+    ("revenue_proxy", "gross floor area x revenue rate", "INR"),
+    ("net_value", "revenue_proxy - modelled_cost", "INR"),
+    ("steel_t", "structural steel from the member schedule (IS 808 masses, lengths in mm)", "t"),
+    ("steel_kg_m2", "steel weight per square metre of gross floor area", "kg/m²"),
+    ("floor_area_m2", "gross floor area, all levels", "m²"),
+    ("drift_utilisation", "max storey drift / IS 1893 7.11.1.1 limit (0.004 h), from the package's drift table", "-"),
     ("drift_margin", "1 - drift_utilisation", "-"),
-    ("drift_max_pct", "max design story drift, Cd*de/Ie", "%"),
-    ("drift_concentration_ratio", "max story drift / mean story drift", "-"),
-    ("wind_drift_utilisation", "max wind story drift / h/400", "-"),
-    ("dc_max", "highest member demand/capacity ratio", "-"),
+    ("drift_max", "max storey drift ratio (edges, 7.8.2 eccentricity)", "-"),
+    ("drift_concentration_ratio", "max storey drift / mean storey drift (worst direction)", "-"),
+    ("wind_drift_utilisation", "max wind sway / IS 800 Table 6 limit", "-"),
+    ("dc_max", "highest member or connection demand/capacity ratio (IS 800)", "-"),
     ("n_over", "members or connections with D/C > 1.0", "count"),
+    ("n_open_reasons", "open reasons in design_status (0 = COMPLETE)", "count"),
     ("n_moment_conn", "moment connections (framework count, LLM-read when not in the package)", "count"),
     ("n_braces", "braces in the member schedule", "count"),
     ("n_columns", "columns in the member schedule", "count"),
     ("n_beams", "beams in the member schedule", "count"),
-    ("V_kip", "design seismic base shear", "kip"),
-    ("W_kip", "seismic weight", "kip"),
-    ("Cs", "seismic response coefficient", "-"),
+    ("VB_kN", "design seismic base shear VB (larger direction, after 7.7.3 scaling)", "kN"),
+    ("W_kN", "seismic weight W (IS 1893 7.4)", "kN"),
+    ("VB_over_W", "VB / W (the design horizontal seismic coefficient realised)", "-"),
+    ("Ah", "design horizontal seismic coefficient (Z/2)(I/R)(Sa/g)", "-"),
     ("T1_s", "fundamental period", "s"),
-    ("wind_V_kip", "larger wind base shear", "kip"),
-    ("torsion_Ax", "accidental torsion amplification", "-"),
-    ("rho", "redundancy factor", "-"),
+    ("wind_VB_kN", "larger wind base shear (IS 875 Part 3)", "kN"),
+    ("Vb_mps", "basic wind speed Vb", "m/s"),
+    ("torsion_ratio", "IS 1893 Table 5(i) torsion ratio (max edge / average displacement)", "-"),
+    ("R", "response reduction factor (IS 1893 Table 9)", "-"),
+    ("Z", "zone factor (IS 1893 Table 3)", "-"),
+    ("I", "importance factor (IS 1893 Table 8)", "-"),
     ("scwb_ratio", "strong-column / weak-beam ratio (reported)", "-"),
-    ("smf_share_pct", "moment-frame share of base shear (dual systems)", "%"),
+    ("smf_share_pct", "moment-frame share of base shear (mixed systems)", "%"),
     ("wind_comfort_mg", "peak wind acceleration if reported", "milli-g"),
 ]
 METRIC_NAMES = [m[0] for m in METRICS]
@@ -52,16 +60,20 @@ METRIC_NAMES = [m[0] for m in METRICS]
 DEFAULT_ELIGIBILITY = {
     "require_done": True,
     "require_checks_pass": True,             # dc_max <= 1.0 and n_over == 0
-    "drift_utilisation_max": 1.0,
-    "smf_share_min_pct": 25.0,                # dual systems only; null share = not checked
-    "require_rho_ax_applied": True,           # rho and Ax present in the package
-    "no_extreme_torsion": True,               # no Type 1b
+    "require_design_complete": True,         # design_status COMPLETE (0 open reasons) -- the India gate authority
+    "drift_utilisation_max": 1.0,            # IS 1893 7.11.1.1
+    "smf_share_min_pct": 25.0,                # mixed moment-frame + braced systems only; null share = not checked
+    "require_gates_pass": True,               # every analysis gate in the package ok (RSA scaling, drift, stability ...)
+    "no_torsional_irregularity": True,        # IS 1893 Table 5(i): torsion ratio within the band
     "wind_comfort_max_mg": 15.0,              # only when reported
-    "representable_only": True,               # SMF / SCBF / dual SMF+SCBF / R=3 X-braced
+    "representable_only": True,               # an IS 800 Section 12 frame type the Nonlinear tools can model
 }
 
-DEFAULT_RATES = {"steel_per_ton": 4500.0, "per_moment_conn": 6000.0, "per_brace": 2500.0,
-                 "revenue_per_sf": 400.0}
+# INR. Rates are placeholders for the study, editable on the Score tab: fabricated and erected
+# structural steel per tonne, per moment connection, per brace, and a revenue proxy per m² of
+# gross floor area.
+DEFAULT_RATES = {"steel_per_t": 110000.0, "per_moment_conn": 60000.0, "per_brace": 25000.0,
+                 "revenue_per_m2": 45000.0}
 
 
 class EquationError(ValueError):
@@ -171,13 +183,13 @@ def _eval(node, env: dict):
 def cost_metrics(m: dict, rates: dict) -> dict:
     r = {**DEFAULT_RATES, **(rates or {})}
     out = dict(m)
-    tons, mc, br, area = m.get("steel_tons"), m.get("n_moment_conn"), m.get("n_braces"), m.get("floor_area_sf")
-    if tons is not None:
-        out["modelled_cost"] = (tons * r["steel_per_ton"] + (mc or 0) * r["per_moment_conn"]
+    tonnes, mc, br, area = m.get("steel_t"), m.get("n_moment_conn"), m.get("n_braces"), m.get("floor_area_m2")
+    if tonnes is not None:
+        out["modelled_cost"] = (tonnes * r["steel_per_t"] + (mc or 0) * r["per_moment_conn"]
                                 + (br or 0) * r["per_brace"])
     else:
         out["modelled_cost"] = None
-    out["revenue_proxy"] = area * r["revenue_per_sf"] if area is not None else None
+    out["revenue_proxy"] = area * r["revenue_per_m2"] if area is not None else None
     out["net_value"] = (out["revenue_proxy"] - out["modelled_cost"]
                         if out["revenue_proxy"] is not None and out["modelled_cost"] is not None else None)
     return out
@@ -200,16 +212,18 @@ def eligibility(row: dict, rules: dict) -> list[str]:
     du = m.get("drift_utilisation")
     if r.get("drift_utilisation_max") is not None and du is not None and du > r["drift_utilisation_max"]:
         why.append(f"drift utilisation {du:.2f} > {r['drift_utilisation_max']}")
+    if r.get("require_design_complete") and row.get("status") == "done":
+        ds = str(m.get("design_status") or "")
+        if ds and ds != "complete":
+            n = m.get("n_open_reasons")
+            why.append(f"design_status {ds.upper()}" + (f" ({n} open reason(s))" if n else ""))
     share = m.get("smf_share_pct")
-    if r.get("smf_share_min_pct") is not None and m.get("is_dual") and share is not None and share < r["smf_share_min_pct"]:
+    if r.get("smf_share_min_pct") is not None and (m.get("is_mixed") or m.get("is_dual")) and share is not None and share < r["smf_share_min_pct"]:
         why.append(f"moment-frame share {share:.0f}% < {r['smf_share_min_pct']:.0f}%")
-    if r.get("require_rho_ax_applied") and row.get("status") == "done":
-        if m.get("rho") is None:
-            why.append("rho not shown in the package")
-        if m.get("torsion_Ax") is None:
-            why.append("Ax not shown in the package")
-    if r.get("no_extreme_torsion") and str(m.get("torsion_class") or "").lower().startswith(("1b", "extreme")):
-        why.append("Type 1b extreme torsional irregularity")
+    if r.get("require_gates_pass") and row.get("status") == "done" and m.get("gates_ok") is False:
+        why.append("analysis gate(s) not ok: " + ", ".join(m.get("gates_failed") or [])[:120])
+    if r.get("no_torsional_irregularity") and m.get("torsion_irregular") is True:
+        why.append("torsionally irregular (IS 1893 Table 5(i))")
     wc = m.get("wind_comfort_mg")
     if r.get("wind_comfort_max_mg") is not None and wc is not None and wc > r["wind_comfort_max_mg"]:
         why.append(f"wind comfort {wc:.0f} mg > {r['wind_comfort_max_mg']:.0f} mg")
@@ -253,7 +267,7 @@ def score_rows(rows: list[dict], equation: str, rules: dict, rates: dict) -> dic
     for r in rows:
         r.setdefault("rank", None)
     rankings = {}
-    for key, reverse in (("modelled_cost", False), ("steel_psf", False), ("drift_margin", True),
+    for key, reverse in (("modelled_cost", False), ("steel_kg_m2", False), ("drift_margin", True),
                          ("drift_concentration_ratio", False), ("n_moment_conn", False), ("net_value", True)):
         have = [r for r in rows if isinstance(r["metrics"].get(key), (int, float))]
         rankings[key] = [r["id"] for r in sorted(have, key=lambda r: r["metrics"][key], reverse=reverse)]

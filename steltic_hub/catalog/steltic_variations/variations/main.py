@@ -1,8 +1,8 @@
-"""Design variations -- the module server.
+"""Design variations -- the module server (India edition: HR Steel = steltic_india, IS 800).
 
 One project = one study. Its state lives in <VARIATIONS_JOBS>/<project>/variations/state.json, next
-to a folder per variation holding the HR Steel package, its report / viewer and the metrics read
-from it. The hub starts this server with STELTIC_URL (HR Steel's address) and VARIATIONS_JOBS (the
+to a folder per variation holding the HR Steel (IS 800) package, its report / viewer and the metrics
+read from it (SI: t, kg/m², m², kN; IS 1893 drift table, design_status). The hub starts this server with STELTIC_URL (HR Steel's address) and VARIATIONS_JOBS (the
 hub's projects folder) and frames the UI at /?project=<name>.
 
 Runs are background threads: closing the browser tab never kills a study, and /api/project/<p>/events
@@ -24,7 +24,7 @@ JOBS = pathlib.Path(os.environ.get("VARIATIONS_JOBS") or (pathlib.Path.cwd() / "
 STELTIC_URL = (os.environ.get("STELTIC_URL") or "").rstrip("/")
 KEEPALIVE = 20.0
 
-app = FastAPI(title="Design variations")
+app = FastAPI(title="Design variations (IS 800)")
 app.mount("/static", StaticFiles(directory=str(UI)), name="static")
 
 
@@ -172,9 +172,9 @@ def _estimate_moment_conn(m: dict) -> Optional[int]:
     sysname = " ".join(str(m.get(k) or "") for k in ("system", "system_declared")).lower()
     if not sysname:
         return None
-    if "smf" not in sysname and "moment" not in sysname and "imf" not in sysname and "omf" not in sysname:
+    if not any(k in sysname for k in ("smf", "smrf", "moment", "omf", "omrf", "portal")):
         return 0
-    nx, ny, nf = m.get("nx"), m.get("ny"), m.get("n_stories")
+    nx, ny, nf = m.get("nx"), m.get("ny"), m.get("n_storeys")
     if not (nx and ny and nf):
         return None
     return int(2 * (nx + ny) * 2 * nf)
@@ -330,10 +330,12 @@ class Study(threading.Thread):
                     if status == "done" and (got.get("llm_read") or {}).get("not_permitted") is True:
                         status, reason = "np", (got["llm_read"].get("np_clause") or "report states NOT PERMITTED")
                     elif status == "done" and (m.get("np_text") or "").strip() and m.get("drift_utilisation") is None:
-                        # the report says NOT PERMITTED and holds no drift check: the agent stopped at the gate
+                        # the report says NOT PERMITTED (IS 1893 Table 9 Note 1 ...) and holds no drift check:
+                        # the agent stopped at the gate
                         status, reason = "np", m["np_text"][:300]
-                    self.log(f"metrics: steel {m.get('steel_tons')} t, drift util {m.get('drift_utilisation')}, "
-                             f"D/C max {m.get('dc_max')}, system {m.get('system') or m.get('system_declared') or '?'}", vid)
+                    self.log(f"metrics: steel {m.get('steel_t')} t, drift util {m.get('drift_utilisation')}, "
+                             f"D/C max {m.get('dc_max')}, design_status {m.get('design_status') or '?'}, "
+                             f"system {m.get('system') or m.get('system_declared') or '?'} R {m.get('R') or '?'}", vid)
                 except Exception as e:
                     hint = (" -- model MOCK: HR Steel's mock run writes no design package; set a real model to design"
                             if (llm.creds() or {}).get("model") == "MOCK" else "")

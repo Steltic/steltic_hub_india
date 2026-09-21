@@ -4,15 +4,20 @@ import json
 from .library import examples_for_prompt
 from .scoring import METRICS, METRIC_NAMES
 
-PLAN_SYSTEM = """You are a senior structural engineer planning a design-variation study of a steel building.
+PLAN_SYSTEM = """You are a senior structural engineer planning a design-variation study of a steel building in India.
 The building is described by a BASE BRIEF. You must propose N design variations. Each variation is designed as a
-separate job by an AISC 360/341 steel-design agent that reads brief text only, so every variation must be
+separate job by an IS 800:2007 steel-design agent (loads IS 875 Parts 1-5, seismic IS 1893 (Part 1):2016 + Amd 1/2,
+ductile detailing IS 800 Section 12 and IS 18168:2023) that reads brief text only, so every variation must be
 expressible as a short instruction that changes ONLY what it states relative to the base brief and keeps
-everything else identical. Never reference grid names, levels or member sizes that the base brief does not define.
-No duplicates. Each variation carries a one-line 'why' (what question it answers).
+everything else identical. Use SI units (m, mm, kN, kN/m2, MPa) and IS terms (zone II-V, Z, I, R from IS 1893
+Table 9, soil type I-III, Vb, IS 2062 grades, IS 808 sections). Never reference grid names, levels or member sizes
+that the base brief does not define. Propose only systems IS 1893 Table 9 covers (SMRF, SCBF, EBF, OMRF / OCBF in
+Zone II only) -- no buckling-restrained braces, plate shear walls, composite walls or damping devices, which have no
+Indian design basis. No duplicates. Each variation carries a one-line 'why' (what question it answers).
 M001 is always the base brief unchanged (title 'Base design as briefed', group 'reference', change '').
-Where a variation is likely NOT PERMITTED by ASCE 7-22 / AISC 341-22 (height limits, analysis-procedure gates),
-still include it when it answers a question, and say in 'why' that the design agent should confirm the clause.
+Where a variation is likely NOT PERMITTED by IS 1893 / IS 800 / IS 18168 (Table 9 Note 1 in Zones III-V, the
+15 m gates, dynamic-analysis requirements), still include it when it answers a question, and say in 'why' that the
+design agent should confirm the clause.
 Return ONLY JSON: {"variations": [{"id": "M001", "title": "...", "group": "...", "change": "...", "why": "..."}]}
 Ids are M001, M002, ... in order. 'group' is the category label the variation belongs to."""
 
@@ -30,22 +35,25 @@ def plan_user(base_brief: str, n: int, mode: str, categories: list[str], instruc
     return "\n".join(parts)
 
 
-READ_SYSTEM = """You read a steel-design report and answer with numbers that are STATED in it. Never guess: use null
-when the report does not state a value. Return ONLY JSON with these keys:
-{"system_X": "SFRS in the X direction (short)", "system_Y": "...", "is_dual": true/false,
+READ_SYSTEM = """You read an IS 800 steel-design report (and its STATUS.md) and answer with numbers that are STATED in
+it. Never guess: use null when the report does not state a value. Return ONLY JSON with these keys:
+{"system_X": "lateral system in the X direction with its IS 1893 Table 9 R (short)", "system_Y": "...",
+ "is_dual": true/false (moment frames AND braced frames share a direction),
  "n_moment_conn": integer or null (total number of moment connections in the building; count from the frames'
    bays x levels x 2 ends when the report gives those, else null),
- "smf_share_pct": number or null (moment frames' share of base shear in a dual system),
+ "smf_share_pct": number or null (moment frames' share of base shear in a mixed system),
  "wind_comfort_mg": number or null (peak wind acceleration in milli-g, if reported),
- "not_permitted": true/false (the report says the system/procedure is NOT PERMITTED),
+ "not_permitted": true/false (the report says the system is NOT PERMITTED -- e.g. IS 1893 Table 9 Note 1 -- or
+   the design_status is not COMPLETE because of a code gate),
  "np_clause": "clause cited" or "",
- "np_list": ["other scope items the report flags as not permitted or not verified"],
+ "np_list": ["other scope items the report flags as not permitted, not verified or TODO(verify)"],
  "notes": "one sentence on anything a reviewer must know"}"""
 
 
 def read_user(excerpt: str, metrics: dict) -> str:
-    known = {k: metrics.get(k) for k in ("system", "system_declared", "drift_max_pct", "drift_limit_pct", "V_kip",
-                                         "n_stories", "plan_x_ft", "plan_y_ft", "n_beams", "n_columns", "n_braces") if metrics.get(k) is not None}
+    known = {k: metrics.get(k) for k in ("system", "system_declared", "design_status", "R", "zone", "drift_utilisation",
+                                         "drift_limit", "VB_kN", "n_storeys", "plan_x_m", "plan_y_m", "n_beams",
+                                         "n_columns", "n_braces") if metrics.get(k) is not None}
     return f"Already extracted from the package (do not contradict):\n{json.dumps(known)}\n\nREPORT EXCERPT:\n{excerpt}\n\nReturn the JSON now."
 
 
