@@ -1,6 +1,6 @@
 # Admin — a module that runs the other modules
 
-Admin is the hub's counterpart of the **Admin** bot in `steltic_grokbot`: the one you talk to about
+Admin is the one you talk to about
 the whole setup rather than about one building. It ships inside the hub (`catalog/steltic_admin/`,
 like Design variations and Probabilistic analysis), gets its own Python environment on **Install**,
 and has no knowledge the hub does not already publish through `/api/state`.
@@ -14,7 +14,7 @@ the project folder.
    Admin (its own server, started by the hub on demand)
      |  POST /api/run/<module>/<tab> ... one at a time, stream held open until `done`
      v
-   steltic_hub  --->  HR Steel / CFS / Nonlinear / Query file manager / ...
+   steltic_hub (India)  --->  HR Steel (IS 800) / CFS (IS 801) / Nonlinear (SNL-IN) / IS corpus / ...
 ```
 
 ## Three jobs
@@ -28,13 +28,13 @@ Type that on the **Batch** tab and press **Make plan**. The words are read by a 
 | you write | it means |
 |---|---|
 | `J1 to hr then nl` | HR Steel designs J1, then Nonlinear runs on J1 (its package field defaults to that design) |
-| `J1 (ex22) to hr` | design J1 from HR Steel's example brief ex22 (through the tab's own example picker) |
+| `J1 (in1) to hr` | design J1 from HR Steel's example brief in1 = IN_Ex1 (through the tab's own example picker; in1 … in15 on HR Steel and CFS) |
 | `J1 (brief.md) to hr` | design J1 from `brief.md` in J1's project folder |
 | `J1 to hr` | same — Admin reads `brief.md` / `brief.txt` from the project folder |
-| `J2 to cfs only` | CFS Steel designs J2 |
-| `J4 continue: make the exterior columns W24x146 and rerun` | HR Steel's Continue tab on J4 with that follow-up |
+| `J2 to cfs only` | CFS (IS 801) + IS 800 braced frames designs J2 |
+| `J4 continue: make the perimeter columns WPB 400x400x305 and rerun` | HR Steel's Continue tab on J4 with that follow-up |
 | `J5 cfs continue: …` | CFS's Continue tab |
-| `Standards convert, index, audit` | Query file manager tabs (the Standards tab builds these for you) |
+| `Standards convert, index, validate` | IS corpus tabs (the Standards tab builds these for you) |
 
 Words like *run*, *then*, *when all done*, *only*, *please* are ignored; anything Admin does not
 recognise is listed as a warning, never guessed at. The full alias table is under *words Admin
@@ -84,13 +84,17 @@ run it was watching may still be going on the module server. Check the project, 
 
 ### 2. Standards — the conversion queue
 
-Converting a specification through the Query file manager's converter takes hours, and a site needs
-five to nine of them. The **Standards** tab scans a folder (default: the Query file manager's own
-`grokbot/documents/standards`), guesses each PDF's canonical stem from its file name (`AISC_360_22`,
-`ASCE7`, `AISI_S400_20` … — correct any it got wrong; the skills' retrieval ids depend on them),
-marks the ones already converted (`grokbot/markdown/<stem>*.md`), and **Queue the conversions**
-turns the ticked rows into a plan: one `convert` step per PDF (`on_fail: continue`), then `index`,
-then `audit`. It is an ordinary plan, so it runs, logs, stops and resumes like any other, and the
+Normally nothing needs converting: the private `engineering_rag_india` repo already carries the
+converted BIS documents and the hub's post-install copies them into the workspace. The queue is for a
+document the repo does not carry, or for re-converting one from your own licensed copy — a conversion
+takes hours (Docling at full accuracy, OCR on the scanned prints). The **Standards** tab scans a folder
+(default: the IS corpus workspace's own `grokbot/documents/standards`), guesses each PDF's canonical
+stem from its file name (`IS_800_2007`, `IS_1893_Part_1_2016`, `IS_875_Part_3_2015`, `IS_18168_2023` …
+— correct any it got wrong; the retrieval ids and the `engineering_standards_IS*` collections depend
+on them), marks the ones already converted (`grokbot/documents/standards/<STEM>/markdown/<STEM>.search.md`),
+and **Queue the conversions** turns the ticked rows into a plan: one `convert` step per PDF
+(`on_fail: continue`), then `index`, then `validate` (`validate.py --corpus`: the must-hit probes and
+the watermark grep). It is an ordinary plan, so it runs, logs, stops and resumes like any other, and the
 hub's own converter behaviour applies unchanged — the native-crash retries, the resume from the last
 finished chunk, the refusal until the converter component is installed (Admin says so before you
 queue anything).

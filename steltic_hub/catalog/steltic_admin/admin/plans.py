@@ -295,7 +295,7 @@ class Executor:
     def _check_source(self, project: str, v: str, field: dict) -> str | None:
         if v == "@project":
             if not any((self.jobs / project / n).is_file() for n in BRIEF_NAMES):
-                return f"no brief.md / brief.txt in the project folder ({self.jobs / project}) -- put the brief there, or write (ex22) / (brief.md) in the instruction, or type it into the plan"
+                return f"no brief.md / brief.txt in the project folder ({self.jobs / project}) -- put the brief there, or write (in1) / (brief.md) in the instruction, or type it into the plan"
             return None
         if v.startswith("@file:"):
             name = v[6:].strip()

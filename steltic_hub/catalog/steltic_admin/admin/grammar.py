@@ -1,13 +1,14 @@
 """Plain-words batch instructions -> a plan, with no model in the loop.
 
     J1 to hr then nl; then J2 to cfs only; then J3 to hr
-    run J1 (ex22) to hr then to nl, when all done run J2 with ex3 to cfs
+    run J1 (in1) to hr then to nl, when all done run J2 with in5 to cfs
     Tower_A -> hr, nl
-    J4 continue: make the exterior columns W24x146 and rerun
+    J4 continue: make the perimeter columns WPB 400x400x305 and rerun
 
 A clause names a project (anything that is not a known word: `J1`, `Tower_A`, `27_High_St`), one or
 more module aliases in the order they should run, and optionally where the design brief comes from --
-`(ex22)` / `[ex22]` / `with ex22` for one of the design servers' example briefs, `(brief.md)` for a
+`(in1)` / `[in1]` / `with in1` for one of the design servers' India example briefs (IN_Ex1 … IN_Ex15 are
+in1 … in15 on both HR Steel and CFS), `(brief.md)` for a
 file in the project folder. A clause with no project continues the previous one ("then to nl").
 Words like run / then / when all done / only / please are ignored; anything else unrecognised is
 reported as a warning rather than guessed at.
@@ -22,16 +23,19 @@ import re
 # alias -> (module id, tab id). Runnable tabs only (kind form with a run); the servers' own UIs
 # (variations, probabilistic) are not driven through the hub's /api/run and are not here.
 ALIASES: dict[str, tuple[str, str]] = {
-    "hr": ("steltic", "design"), "hrs": ("steltic", "design"), "hrsteel": ("steltic", "design"),
-    "steltic": ("steltic", "design"), "steel": ("steltic", "design"), "design": ("steltic", "design"),
-    "cfs": ("steltic_cfs", "design"), "cfssteel": ("steltic_cfs", "design"), "coldformed": ("steltic_cfs", "design"),
-    "nl": ("steltic_nonlinear", "run"), "snl": ("steltic_nonlinear", "run"), "nonlinear": ("steltic_nonlinear", "run"),
-    "non-linear": ("steltic_nonlinear", "run"), "nlrha": ("steltic_nonlinear", "run"), "pushover": ("steltic_nonlinear", "run"),
-    "inspect": ("steltic_nonlinear", "inspect"), "hazard": ("steltic_nonlinear", "hazard"),
-    "criteria": ("steltic_nonlinear", "criteria"), "compare": ("steltic_nonlinear", "compare"), "mesh": ("steltic_nonlinear", "mesh"),
-    "qfm": ("steltic_grokbot", "ask"), "query": ("steltic_grokbot", "ask"), "ask": ("steltic_grokbot", "ask"),
-    "corpus": ("steltic_grokbot", "corpus"), "convert": ("steltic_grokbot", "convert"), "index": ("steltic_grokbot", "index"),
-    "reindex": ("steltic_grokbot", "index"), "audit": ("steltic_grokbot", "audit"),
+    "hr": ("steltic_india", "design"), "hrs": ("steltic_india", "design"), "hrsteel": ("steltic_india", "design"),
+    "steltic": ("steltic_india", "design"), "steel": ("steltic_india", "design"), "design": ("steltic_india", "design"),
+    "is800": ("steltic_india", "design"), "hotrolled": ("steltic_india", "design"),
+    "cfs": ("steltic_CFS_india", "design"), "cfssteel": ("steltic_CFS_india", "design"), "coldformed": ("steltic_CFS_india", "design"),
+    "is801": ("steltic_CFS_india", "design"),
+    "nl": ("steltic_nonlinear_india", "run"), "snl": ("steltic_nonlinear_india", "run"), "nonlinear": ("steltic_nonlinear_india", "run"),
+    "non-linear": ("steltic_nonlinear_india", "run"), "nlrha": ("steltic_nonlinear_india", "run"), "pushover": ("steltic_nonlinear_india", "run"),
+    "inspect": ("steltic_nonlinear_india", "inspect"), "hazard": ("steltic_nonlinear_india", "hazard"), "spectrum": ("steltic_nonlinear_india", "hazard"),
+    "criteria": ("steltic_nonlinear_india", "criteria"), "compare": ("steltic_nonlinear_india", "compare"), "mesh": ("steltic_nonlinear_india", "mesh"),
+    "qfm": ("engineering_rag_india", "ask"), "query": ("engineering_rag_india", "ask"), "ask": ("engineering_rag_india", "ask"),
+    "rag": ("engineering_rag_india", "ask"), "is": ("engineering_rag_india", "ask"),
+    "corpus": ("engineering_rag_india", "corpus"), "convert": ("engineering_rag_india", "convert"), "index": ("engineering_rag_india", "index"),
+    "reindex": ("engineering_rag_india", "index"), "validate": ("engineering_rag_india", "validate"), "audit": ("engineering_rag_india", "validate"),
 }
 # "continue" is relative: it means the continue tab of the design module named before it (HR Steel by default)
 CONTINUE = "continue"
@@ -45,7 +49,8 @@ FILLER = {"run", "then", "to", "the", "a", "an", "and", "when", "all", "done", "
 CLAUSE_SPLIT = re.compile(r"(?:\s*;\s*|\s*\n+\s*|\s*\bthen\b\s*|\s*\bafter that\b\s*"
                           r"|\s*\bwhen (?:all|that|it|they)(?: is| are)? (?:done|finished|complete)\b\s*|\s*\bnext\b\s*)", re.I)
 BRIEF_PAREN = re.compile(r"[\(\[]\s*([A-Za-z0-9_.\-]+)\s*[\)\]]")
-EXAMPLE = re.compile(r"^(?:ex|example)[_-]?(\d+[a-z]?|redesign)$", re.I)
+# in1 .. in15 (the India briefs, IN_Ex1 .. IN_Ex15); the US ex<n> keys are still accepted for the engines' usa_reference briefs
+EXAMPLE = re.compile(r"^(?:in|in_ex|ex|example)[_-]?(\d+[a-z]?|redesign)$", re.I)
 PROJECT = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
@@ -101,7 +106,7 @@ def parse(text: str) -> dict:
             lw = w.lower().strip(".,:")
             two = (lw + " " + words[i + 1].lower().strip(".,:")) if i + 1 < len(words) else None
             if lw == CONTINUE:
-                base = mods[-1][0] if mods and mods[-1][1] == "design" else "steltic"
+                base = mods[-1][0] if mods and mods[-1][1] == "design" else "steltic_india"
                 if mods and mods[-1][1] == "design":
                     mods[-1] = (base, CONTINUE)          # "J4 cfs continue: …" is CFS's continue tab, not a design + a continue
                 else:
@@ -142,7 +147,9 @@ def _brief_source(token: str) -> str:
     t = token.strip()
     m = EXAMPLE.match(t)
     if m:
-        return "@example:" + ("redesign" if m.group(1).lower() == "redesign" else "ex" + m.group(1).lower())
+        key = m.group(1).lower()
+        prefix = "ex" if t.lower().startswith(("ex", "example")) else "in"
+        return "@example:" + ("redesign" if key == "redesign" else prefix + key)
     return "@file:" + t
 
 

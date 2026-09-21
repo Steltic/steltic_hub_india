@@ -68,7 +68,7 @@ function renderBatch(m) {
     el('p', { class: 'lead' }, 'Say what to run. Admin turns it into a plan you can check and edit, then runs the steps one after another through the hub -- each one exactly as a click on that module tab would -- and keeps the log of every run here.'));
 
   // ---- instruction
-  const ta = el('textarea', { rows: 3, placeholder: 'J1 to hr then nl; then J2 to cfs only; then J3 (ex22) to hr' });
+  const ta = el('textarea', { rows: 3, placeholder: 'J1 to hr then nl; then J2 to cfs only; then J3 (in1) to hr' });
   ta.value = localStorage.getItem('admin.instruction') || '';
   ta.oninput = () => localStorage.setItem('admin.instruction', ta.value);
   const msg = el('div', { class: 'note' });
@@ -174,7 +174,7 @@ function renderBatch(m) {
       try { const d = JSON.parse(ed.value); S.plan = { ...p, title: d.title || p.title, options: d.options || p.options, steps: (d.steps || []).map((s, i) => ({ ...s, n: i + 1, status: 'pending', fields: s.fields || {} })) }; paintPlan(); toast('applied -- Save to keep it'); }
       catch (e) { toast('not valid JSON: ' + e.message, 'bad'); }
     } }, 'Apply JSON');
-    const details = el('details', { open: !p.steps.length }, el('summary', { class: 'note', style: 'cursor:pointer' }, 'edit the plan as JSON (fields: "@project" = brief.md in the project folder, "@example:ex22", "@file:name", or the value itself; on_fail: stop | skip_project | continue; options.wait_for_llm: wait for the model server as long as it takes, then continue; options.auto_continue: how many times a paused or failed design is continued by itself)'),
+    const details = el('details', { open: !p.steps.length }, el('summary', { class: 'note', style: 'cursor:pointer' }, 'edit the plan as JSON (fields: "@project" = brief.md in the project folder, "@example:in1", "@file:name", or the value itself; on_fail: stop | skip_project | continue; options.wait_for_llm: wait for the model server as long as it takes, then continue; options.auto_continue: how many times a paused or failed design is continued by itself)'),
       ed, el('div', { class: 'row', style: 'margin-top:6px' }, apply));
     // log
     const logBox = el('div', { style: 'margin-top:12px' });
@@ -250,7 +250,7 @@ function cheatSheet() {
   for (const r of rows) tb.append(el('tr', {}, el('td', {}, r.aliases.map(a => el('code', {}, a)).flatMap((c, i) => i ? [' ', c] : [c])), el('td', {}, `${modName(r.module)} / ${r.tab}`)));
   return el('div', { class: 'cheat' },
     el('p', {}, 'One project per clause, then the modules in order; ', el('code', {}, 'then'), ', ', el('code', {}, ';'), ' or a new line separates clauses. ',
-      'A brief for a design step: ', el('code', {}, 'J1 (ex22) to hr'), ' uses an example brief, ', el('code', {}, 'J1 (brief.md) to hr'), ' a file in the project folder; with neither, Admin reads ', el('code', {}, 'brief.md'), ' from the project folder. ',
+      'A brief for a design step: ', el('code', {}, 'J1 (in1) to hr'), ' uses an example brief, ', el('code', {}, 'J1 (brief.md) to hr'), ' a file in the project folder; with neither, Admin reads ', el('code', {}, 'brief.md'), ' from the project folder. ',
       el('code', {}, 'J4 continue: <what to change>'), ' iterates on a finished design.'),
     el('table', {}, tb));
 }
@@ -259,7 +259,7 @@ function cheatSheet() {
 function renderStandards(m) {
   const pane = el('div', { class: 'pane' });
   pane.append(el('h2', {}, 'Standards'),
-    el('p', { class: 'lead' }, 'The specification PDFs you are licensed for, converted through the Query file manager one after another. Each conversion takes hours; the queue is a plan like any other, so it survives a restart and shows every run\'s log on the Batch tab.'));
+    el('p', { class: 'lead' }, 'Licensed BIS specification PDFs converted through the IS corpus module one after another. Normally nothing needs converting -- the private engineering_rag_india repo already carries the converted documents -- so this is for a document the repo does not carry, or a re-conversion from your own copy. Each conversion takes hours; the queue is a plan like any other, so it survives a restart and shows every run\'s log on the Batch tab.'));
   const folder = el('input', { type: 'text', placeholder: 'folder with the PDFs' });
   const msg = el('span', { class: 'note' });
   const table = el('div');
@@ -272,8 +272,8 @@ function renderStandards(m) {
     if (!folder.value.trim()) folder.value = scan.folder;
     msg.textContent = scan.exists ? `${scan.items.length} PDF${scan.items.length === 1 ? '' : 's'} · converted so far: ${scan.converted.length ? scan.converted.join(', ') : 'none'}` : 'that folder does not exist';
     if (!scan.exists) return;
-    if (!scan.qfm_installed) table.append(el('div', { class: 'err-list' }, 'Query file manager is not installed -- Modules page → Install.'));
-    else if (scan.converter_missing && scan.converter_missing.length) table.append(el('div', { class: 'err-list' }, 'The PDF converter (Docling) is not installed in Query file manager\'s environment -- Modules page → Query file manager → Install PDF converter (a large download, once). The queue cannot start until it is.'));
+    if (!scan.qfm_installed) table.append(el('div', { class: 'err-list' }, 'The IS corpus module (engineering_rag_india) is not installed -- Modules page → Install (git clone with your GitHub credentials, or link a working copy).'));
+    else if (scan.converter_missing && scan.converter_missing.length) table.append(el('div', { class: 'err-list' }, 'The PDF converter (Docling) is not installed in the IS corpus module\'s environment -- Modules page → IS corpus → Install PDF converter (a large download, once). The queue cannot start until it is.'));
     const tb = el('tbody');
     for (const it of scan.items) {
       const cb = el('input', { type: 'checkbox' }); cb.checked = !it.converted && !!it.stem; it._cb = cb;
@@ -288,7 +288,7 @@ function renderStandards(m) {
     const aud = el('input', { type: 'checkbox' }); aud.checked = true;
     const chunk = el('input', { type: 'number', value: 5, min: 1, max: 20 });
     acts.append(
-      el('label', { class: 'note' }, reb, ' rebuild the index afterwards'), el('label', { class: 'note' }, aud, ' audit the corpus afterwards'),
+      el('label', { class: 'note' }, reb, ' rebuild the index afterwards'), el('label', { class: 'note' }, aud, ' validate the corpus afterwards (must-hit probes, watermark grep)'),
       el('label', { class: 'note' }, 'pages per chunk ', chunk),
       el('button', { class: 'primary', disabled: !scan.qfm_installed, onclick: async () => {
         const items = scan.items.filter(it => it._cb.checked).map(it => ({ pdf: it.pdf, stem: it._sel.value }));
@@ -303,7 +303,7 @@ function renderStandards(m) {
   }
   pane.append(el('div', { class: 'card' },
     el('label', { class: 'f' }, 'Folder'), el('div', { class: 'row' }, el('div', { class: 'grow' }, folder), el('button', { onclick: doScan }, 'Scan'), msg),
-    el('p', { class: 'note', style: 'margin-top:6px' }, 'Leave empty for the Query file manager\'s own standards folder. Stems are guessed from the file names -- correct any that are wrong; the skills\' retrieval ids depend on them.'),
+    el('p', { class: 'note', style: 'margin-top:6px' }, 'Leave empty for the IS corpus workspace\'s own standards folder. Stems are guessed from the file names (IS_800_2007, IS_1893_Part_1_2016, IS_875_Part_3_2015 …) -- correct any that are wrong; the retrieval ids and the engineering_standards_IS* collections depend on them.'),
     table, acts));
   m.append(pane);
   doScan();

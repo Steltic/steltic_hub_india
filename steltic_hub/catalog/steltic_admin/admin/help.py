@@ -230,7 +230,7 @@ class GitHub:
 
 # ---------------------------------------------------------------- the answer
 SYSTEM = """You are Admin, the help desk of the Steltic hub (a desktop app that runs steel-design modules:
-HR Steel, CFS Steel, Nonlinear (SNL), Query file manager, Design variations, Probabilistic analysis, Admin).
+HR Steel (IS 800), CFS (IS 801) + IS 800 braced frames, Nonlinear (SNL-IN), the IS corpus (engineering_rag_india), Design variations, Probabilistic analysis, Admin).
 Answer the user's question from the EXCERPTS below and nothing else. Be concrete and short: say what the
 code or document actually does, name the file and the option or endpoint involved, and cite each fact as
 (label lines a-b) using the labels exactly as given. If the excerpts do not answer the question, say so and

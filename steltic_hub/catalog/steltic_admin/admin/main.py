@@ -1,7 +1,7 @@
 """Admin -- the module server.
 
 Started by the hub (uvicorn admin.main:app) with HUB_URL (where the hub answers), HUB_DATA (the hub's
-data folder: module checkouts live under modules/, the Query file manager workspace under grokbot/),
+data folder: module checkouts live under modules/, the IS corpus workspace under grokbot/),
 HUB_JOBS (the projects folder), HUB_CATALOG (the hub's bundled manifests and modules) and ADMIN_DATA
 (where plans, logs and the help cache go). The hub frames the UI at /#batch, /#standards and /#help
 and pushes the user's LLM connection to /api/creds.
@@ -121,7 +121,7 @@ PLAN_SYSTEM = """You turn a structural engineer's instruction into a batch plan 
 {"steps": [{"project": "<name>", "module": "<module id>", "tab": "<tab id>", "fields": {...}}], "notes": ["..."]}
 Rules: steps run in the order given, one at a time. Use only the modules and tabs listed, and only their fields.
 Project names are letters, digits, _ and -. A design tab's "brief" field may be "@project" (the brief.md in the
-project folder), "@example:<id>" (an example brief such as ex22) or "@file:<name>" (a file in the project folder),
+project folder), "@example:<id>" (an example brief such as in1 = IN_Ex1) or "@file:<name>" (a file in the project folder),
 or the literal brief text if the user wrote it. Do not invent field values the user did not give; leave a field out
 to use its default. If the instruction is ambiguous say so in notes and still give your best plan."""
 
@@ -283,7 +283,7 @@ def standards_scan(folder: str = ""):
     d["default_folder"] = str(_grokbot_root() / "documents" / "standards")
     try:
         st = hub_state()
-        qfm = next((m for m in st["modules"] if m["id"] == "steltic_grokbot"), None)
+        qfm = next((m for m in st["modules"] if m["id"] == standards.CORPUS_MODULE), None)
         conv = next((t for t in (qfm or {}).get("tabs") or [] if t["id"] == "convert"), None)
         d["qfm_installed"] = bool(qfm and qfm["installed"])
         d["converter_missing"] = list((conv or {}).get("missing_optional") or []) if conv else ["converter"]
@@ -349,7 +349,7 @@ async def help_ask(request: Request):
             n = _corpus.add_tree(root, label, code=code)
             sources.append({"source": label, "path": str(root), "files": n})
     if scope in ("github", "both"):
-        repos = {("Steltic", "steltic_hub", "main")}
+        repos = {("Steltic", "steltic_hub_india", "main")}
         for m in (st or {}).get("modules") or []:
             pr = helpdesk.GitHub.parse_repo(m.get("git") or "")
             if pr:
