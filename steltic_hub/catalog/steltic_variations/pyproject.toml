@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "steltic-variations"
 version = "0.1.0"
-description = "Design variations: plan N variations of a steel building brief, design each with HR Steel, extract metrics, score, rank and select finalists"
+description = "Design variations (India): plan N variations of a steel building brief, design each with HR Steel (IS 800), extract metrics, score, rank and select finalists"
 requires-python = ">=3.10"
 dependencies = ["fastapi>=0.110", "uvicorn[standard]>=0.27", "httpx>=0.27"]
 
