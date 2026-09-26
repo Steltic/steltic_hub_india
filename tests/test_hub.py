@@ -1313,23 +1313,6 @@ def test_a_tab_may_carry_extra_buttons_beside_its_run():
                                   "actions": [{"id": "a", "run": {"kind": "cli", "command": ["-m", "x"]}}]}]}, "t")
 
 
-def test_the_nonlinear_run_tab_offers_revise_beside_run_analyses():
-    """Run analyses does no standards lookups, so its reports mark every clause UNVERIFIED. Revise
-    re-issues them against the review, grounded in the live IS corpus. Same tab, same project."""
-    cat = load_catalog(config.CATALOG_DIR)
-    run = next(t for t in cat["steltic_nonlinear_india"].tabs if t.id == "run")
-    assert run.run.label == "Run analyses"
-    rev = next(a for a in run.actions if a.id == "revise")
-    assert rev.label == "Revise reports"
-    assert rev.run.env.get("RAG_API_URL") == "{server.engineering_rag_india}/query", "it must query the live IS corpus"
-    assert rev.run.llm is True
-    assert "Review" in rev.info and "UNVERIFIED" in rev.info, "the note must say to run Review first"
-    assert "ASCE" not in rev.info and "AISC" not in rev.info, "India: IS documents only (D3)"
-    # and the Review tab it waits on still writes review.md into the same project folder
-    review = next(t for t in cat["steltic_nonlinear_india"].tabs if t.id == "review")
-    assert "review.md" in {a["path"] for a in review.artifacts} and review.run.cwd == "{job_dir}"
-
-
 def test_an_action_only_gets_the_fields_it_asked_for():
     """The tab's fields are drawn for its MAIN run; a second button is usually a different program.
 
@@ -1377,18 +1360,84 @@ def test_an_action_only_gets_the_fields_it_asked_for():
             Manifest.parse(mk(bad), "t")
 
 
-def test_the_nonlinear_revise_action_takes_none_of_the_run_tabs_flags():
-    """The shipped catalog, against the failure that was actually reported."""
+def test_the_nonlinear_run_tab_offers_collect_before_run_analyses():
+    """The analyses rely on IS values read out of the corpus (IS 2062 fy / fu, IS 18168 Ry, IS 800 Section 12,
+    IS 1893 Z / I / Sa/g / damping). So the Run tab carries a second button, `Collect specification values`, and
+    the main button is gated on the file it writes. India: IS corpus only, and the hinge backbones are named as
+    modelling assumptions, never acceptance criteria (D3 / D7)."""
+    import json, pathlib
+    cat = pathlib.Path(__file__).resolve().parents[1] / "steltic_hub" / "catalog" / "steltic_nonlinear_india.json"
+    m = Manifest.parse(json.loads(cat.read_text(encoding="utf-8")), "t")
+    run = next(t for t in m.tabs if t.id == "run")
+    col = next(a for a in run.actions if a.id == "collect")
+    assert col.label == "Collect specification values" and col.run.llm is True
+    assert col.run.command[:3] == ["-m", "snl", "collect"]
+    assert col.run.env.get("RAG_API_URL") == "{server.engineering_rag_india}/query"
+    assert col.fields == ["job", "package"] and col.run.stage == run.run.stage     # the same package, staged the same way
+    assert "first" in col.info.lower()
+    for doc in ("IS 2062", "IS 18168", "IS 800", "IS 1893"):
+        assert doc in col.info, doc
+    assert not any(w in col.info for w in ("ASCE", "AISC")), "India: IS documents only (D3)"
+    assert "modelling assumption" in col.info and "never acceptance criteria" in col.info
+    assert [q["path"] for q in run.run.requires] == ["hinge_params_collected.json"]
+    assert "Collect specification values" in run.run.requires[0]["missing"]
+    assert not any(a.id == "revise" for a in run.actions)       # Revise stays a CLI step (`snl revise`) for old jobs
+    j = m.to_json()["tabs"]
+    rt = next(t for t in j if t["id"] == "run")
+    assert rt["run"]["requires"][0]["path"] == "hinge_params_collected.json"
+
+
+def test_the_nonlinear_collect_action_takes_only_the_project_and_the_package():
+    """The shipped catalog, against the failure that was actually reported for its predecessor:
+    `snl revise <job> --site-class D --n-records 11 ...` exited 2. Collect takes the project and the
+    design package and none of the analysis flags."""
     import dataclasses, json, pathlib
     from steltic_hub.runners import cli_args
     from steltic_hub.manifest import Tab
     cat = pathlib.Path(__file__).resolve().parents[1] / "steltic_hub" / "catalog" / "steltic_nonlinear_india.json"
     tabs = [Tab.parse(t) for t in json.loads(cat.read_text(encoding="utf-8"))["tabs"]]
     run = next(t for t in tabs if t.id == "run")
-    rev = next(a for a in run.actions if a.id == "revise")
+    col = next(a for a in run.actions if a.id == "collect")
     sent = {"job": "IN_Ex1", "level": "both", "n_records": 11, "dt": 0.01, "integrator": "hht", "parallel": 2}
     main = cli_args(run, sent, {"job": "IN_Ex1"})
     assert "--level" in main and "--n-records" in main          # the main run still wants them
-    keep = [f for f in run.fields if f.id in rev.fields]
-    assert cli_args(dataclasses.replace(run, run=rev.run, fields=keep), sent, {"job": "IN_Ex1"}) == []
-    assert rev.run.command[:3] == ["-m", "snl", "revise"]
+    keep = [f for f in run.fields if f.id in col.fields]
+    assert cli_args(dataclasses.replace(run, run=col.run, fields=keep), sent, {"job": "IN_Ex1"}) == []
+
+
+def test_a_run_may_require_files_another_step_writes_first():
+    """`run.requires`: the tab says which files must already be in the project. The page greys the
+    button and shows the sentence; /api/run refuses the start for anything that skips the page."""
+    srv = {"command": ["-m", "x"], "health": "/healthz"}
+    def mk(req):
+        return {"schema": 1, "id": "x", "name": "X", "env": {"python": "3.12", "install": []}, "server": srv,
+                "tabs": [{"id": "go", "kind": "form", "run": {"kind": "cli", "command": ["-m", "x"], "requires": req}}]}
+    m = Manifest.parse(mk([{"path": "params.json", "missing": "Collect first."}]), "t")
+    assert m.tabs[0].run.requires == [{"path": "params.json", "missing": "Collect first."}]
+    assert m.to_json()["tabs"][0]["run"]["requires"] == [{"path": "params.json", "missing": "Collect first."}]
+    assert Manifest.parse(mk([]), "t").to_json()["tabs"][0]["run"]["requires"] == []
+    for bad in ("params.json",                                    # not a list
+                [{"missing": "x"}],                               # no path
+                [{"path": "../outside.json"}],                    # escapes the project
+                [{"path": "C:/abs.json"}],
+                [{"path": "/abs.json"}],
+                [{"path": "p.json", "missing": 3}]):
+        with pytest.raises(ManifestError):
+            Manifest.parse(mk(bad), "t")
+
+
+def test_api_run_refuses_until_the_required_file_exists(monkeypatch, tmp_path):
+    from steltic_hub import main as M, envs
+    from fastapi.testclient import TestClient
+    monkeypatch.setattr(config, "JOBS_DIR", tmp_path)
+    monkeypatch.setattr(M.REG, "is_installed", lambda mid: True)
+    monkeypatch.setattr(envs, "optional_present", lambda m_, g: True)
+    m = M.REG.manifest("steltic_nonlinear_india")
+    run = next(t for t in m.tabs if t.id == "run")
+    assert run.run.requires, "the Nonlinear Run tab must be gated"
+    with TestClient(M.app) as c:
+        body = c.post("/api/run/steltic_nonlinear_india/run", json={"job": "Gate1", "fields": {"package": "x.zip"}}).text
+        assert "Collect specification values first" in body and '"ok": false' in body.lower()
+        # the other button on the tab is not gated -- it is the step that opens the gate
+        body2 = c.post("/api/run/steltic_nonlinear_india/run", json={"job": "Gate1", "fields": {"package": "x.zip"}, "action": "collect"}).text
+        assert "Collect specification values first" not in body2

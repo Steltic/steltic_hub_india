@@ -534,7 +534,14 @@ The Nonlinear module's manifest (`catalog/steltic_nonlinear_india.json`) declare
   unless *Level* says otherwise. **IS 1893 (Part 1):2016 provides no acceptance criteria for nonlinear
   analysis; results are for information**: the reports give drifts, ductility demands, hinge rotations
   against the IS 800 Section 12 deformation capacities (0.02 / 0.04 rad) as reference, base shear
-  against VB and λu, and no verdict.
+  against VB and λu, and no verdict. The tab's second button, **Collect specification values**
+  (`snl collect`, `run.llm`, IS corpus), comes first: it reads IS 2062 fy / fu, IS 18168 Ry / Ru,
+  the IS 800 Section 12 capacity for the system and the IS 1893 Z / I / Sa/g / damping out of the
+  corpus with exact lookups, has the model copy each value with its cell, checks every quote, and
+  writes `hinge_params_collected.json`. *Run analyses* stays closed (`run.requires`) until that file
+  exists, and then runs on it. The hinge backbones are in no IS document and stay modelling
+  assumptions (information / EOR input). `snl revise` (CLI only) re-issues an older project's reports
+  against its review.
 * **IS 1893 spectrum** (form) — `nlrha hazard`: the zone / Z / soil type / I / R read from the package
   (or overridden) become `nlrha/site_hazard.json`, the DBE and MCE targets the Run tab scales to.
 * **Design criteria** (form) — `nlrha criteria`: the design-criteria draft (.docx + .html) from the

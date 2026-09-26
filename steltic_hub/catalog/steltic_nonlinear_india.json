@@ -66,7 +66,7 @@
       "id": "run",
       "title": "Run",
       "kind": "form",
-      "blurb": "Three engines in sequence, each in its own process (openseespy is a process singleton). The HR Steel (IS 800) package is copied into this project folder first, so every output lands beside it. NLRHA scales the suite to the IS 1893 ELASTIC spectrum — DBE = (Z/2)·I·Sa/g and MCE = Z·I·Sa/g, never divided by R — and runs both levels; the DDM takes its combinations from the package's load_plan (IS 875 / IS 1893). IS 1893 (Part 1):2016 provides no acceptance criteria for nonlinear analysis; results are for information. Typical times on two cores: pushover 5–15 min, NLRHA 30–90 min, DDM 30–70 min. The design-criteria draft is refreshed at the end of every run.",
+      "blurb": "Collect specification values first, then Run analyses: three engines in sequence, each in its own process (openseespy is a process singleton). The HR Steel (IS 800) package is copied into this project folder first, so every output lands beside it. NLRHA scales the suite to the IS 1893 ELASTIC spectrum — DBE = (Z/2)·I·Sa/g and MCE = Z·I·Sa/g, never divided by R — and runs both levels; the DDM takes its combinations from the package's load_plan (IS 875 / IS 1893). IS 1893 (Part 1):2016 provides no acceptance criteria for nonlinear analysis; results are for information. Typical times on two cores: pushover 5–15 min, NLRHA 30–90 min, DDM 30–70 min. The design-criteria draft is refreshed at the end of every run.",
       "run": {
         "kind": "cli",
         "cwd": "{job_dir}",
@@ -89,6 +89,12 @@
           "{job_dir}",
           "--steltic-engine",
           "{need.steltic_india}/steel_engine"
+        ],
+        "requires": [
+          {
+            "path": "hinge_params_collected.json",
+            "missing": "Collect specification values first. The analyses run on the IS values that step reads out of the IS corpus (IS 2062 fy / fu, IS 18168 Ry, IS 800 Section 12 deformation capacities, IS 1893 Z / I / Sa/g / damping), and their reports cite them; without it every clause would come back marked UNVERIFIED."
+          }
         ]
       },
       "fields": [
@@ -113,7 +119,8 @@
           "label": "Hinge parameters (optional)",
           "accept": ".json",
           "arg": "--params",
-          "help": "Job copy of hinge_params.json. IS 800 / IS 1893 tabulate no hinge backbones: without a file the module's placeholder parameters are used and the pushover supplement carries the UNVERIFIED banner. Hinge rotations are reported against the IS 800 Section 12 deformation capacities (0.02 / 0.04 rad) as reference only."
+          "help": "Leave as is: the analyses use the file Collect specification values wrote for this project. Choose a file only to override it with your own job copy of hinge_params.json (hinge backbones are modelling assumptions / EOR inputs -- IS 800 and IS 1893 give none).",
+          "placeholder": "hinge_params_collected.json (from Collect specification values, automatic)"
         },
         {
           "id": "only",
@@ -352,27 +359,37 @@
       ],
       "actions": [
         {
-          "id": "revise",
-          "label": "Revise reports",
-          "info": "Press this after the Review tab has finished on this project. Run analyses does the OpenSees work with no standards lookups, so its reports mark every clause it cites UNVERIFIED. Revise re-issues those same reports against review.md, looking each clause up live in the IS corpus (engineering_rag_india: IS 1893 (Part 1):2016, IS 800:2007, IS 18168:2023) and clearing the ones it can ground. A clause the corpus does not hold stays marked, and so do the hinge backbones: IS 800 / IS 1893 give none, so they remain modelling assumptions (information / EOR input), never acceptance criteria. No analysis is re-run.",
+          "id": "collect",
+          "label": "Collect specification values",
+          "fields": [
+            "job",
+            "package"
+          ],
+          "info": "Do this first. It reads the IS values the analyses rely on out of the IS corpus on this PC (engineering_rag_india) with deterministic exact lookups — IS 2062 (Part 1):2025 Table 3 fy / fu for the design's grade, IS 18168:2023 Table 1 Ry / Ru (reference, capacity design), IS 800:2007 Section 12 joint-rotation capacity for the system (0.02 / 0.04 rad, reference only), IS 1893 (Part 1):2016 Table 3 Z, Table 8 I, 6.4.2 Sa/g for the soil type and 7.2.4 damping — has the model copy each value with the cell it came from, checks every quote and number, and writes hinge_params_collected.json into the project. The hinge backbones are in no IS document: they stay modelling assumptions (information / EOR input), never acceptance criteria. Run analyses opens once that file exists; a value the corpus cannot answer is named and Run analyses stays closed.",
           "run": {
             "kind": "cli",
             "cwd": "{job_dir}",
-            "label": "Revise reports",
+            "label": "Collect specification values",
             "llm": true,
             "env": {
               "RAG_API_URL": "{server.engineering_rag_india}/query"
             },
+            "stage": [
+              {
+                "from": "{f.package}",
+                "to": "{job_dir}",
+                "required": true,
+                "label": "design package",
+                "missing": "No design package for this project: run HR Steel (IS 800) on it first (its design is picked up automatically), or choose the .zip that HR Steel produced."
+              }
+            ],
             "command": [
               "-m",
               "snl",
-              "revise",
+              "collect",
               "{job_dir}"
             ]
-          },
-          "fields": [
-            "job"
-          ]
+          }
         }
       ]
     },
