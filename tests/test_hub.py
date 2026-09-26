@@ -1211,3 +1211,120 @@ def test_run_continues_names_the_tab_a_resume_picks_up():
         cont = next(t for t in cat[mid].tabs if t.id == "continue")
         assert cont.run.continues == "design" and cont.run.body.get("resume") is True
         assert [t.id for t in cat[mid].tabs if t.run and t.run.continues] == ["continue"]
+
+
+def test_every_nonlinear_tab_that_reads_the_design_package_stages_it():
+    """US 2026-09-21: Site hazard pressed on a project whose HR Steel design had never been staged died with
+    `no model_opensees.py under <job_dir>` -- only Run and Inspect copied the design into the project folder.
+    Hazard (the IS 1893 spectrum: periods, zone / soil / I), Criteria and Mesh read the package too, so they
+    stage the India HR Steel design the same way."""
+    cat = load_catalog(config.CATALOG_DIR)
+    m = cat["steltic_nonlinear_india"]
+    for tid in ("run", "inspect", "hazard", "criteria", "mesh"):
+        t = next(t for t in m.tabs if t.id == tid)
+        assert t.run.stage and t.run.stage[0]["from"] == "{f.package}" and t.run.stage[0]["required"], tid
+        assert "HR Steel" in t.run.stage[0]["missing"], tid
+        pkg = next(f for f in t.fields if f.id == "package")
+        assert pkg.type == "file" and pkg.default == "{out.steltic_india}", tid
+    for tid in ("review", "compare"):                     # these read what a Run wrote, not the design
+        t = next(t for t in m.tabs if t.id == tid)
+        assert not t.run.stage, tid
+
+
+# ---------------------------------------------------------------- the rail's "running"
+def test_state_says_which_module_and_tab_is_running_not_just_that_something_is():
+    """`/api/state` used to report `{run-uuid: True}` -- true, and useless.
+
+    The UI keys its own run map `"<module>.<tab>"` (runKey), so it could not match a uuid to a
+    card and computed the rail's "running..." from its own local map instead. That map belongs to
+    one browser tab: it went dark on a reload and never lit for a run started in another window.
+    """
+    runs = runners.JobRuns()
+    assert runs.live_tabs() == {}
+    runs.began("deadbeefcafe", "steltic_india", "design")
+    runs.began("0123456789ab", "engineering_rag_india", "convert")
+    assert runs.live_tabs() == {"steltic_india.design": True, "engineering_rag_india.convert": True}
+    runs.ended("deadbeefcafe")
+    assert runs.live_tabs() == {"engineering_rag_india.convert": True}
+    runs.ended("deadbeefcafe")                       # ending twice is not an error
+    runs.ended("never-started")
+    assert runs.live_tabs() == {"engineering_rag_india.convert": True}
+
+
+def test_state_reports_the_live_tabs_the_ui_can_match():
+    from steltic_hub.main import app, RUNS
+    from fastapi.testclient import TestClient
+    RUNS.began("feedfacefeed", "steltic_nonlinear_india", "run")
+    try:
+        with TestClient(app) as c:
+            running = c.get("/api/state").json()["running"]
+        assert running.get("steltic_nonlinear_india.run") is True, running
+        assert all("." in k for k in running), f"keys must be <module>.<tab>, got {list(running)}"
+    finally:
+        RUNS.ended("feedfacefeed")
+
+
+def test_a_server_backed_module_is_visible_in_the_rail():
+    """Admin, Design variations and Probabilistic do their work in a module server, not in a run,
+    so the rail had nothing to light up. The card carries `has_server`/`server_up`; the rail now
+    reads them, which is what this asserts is still being published."""
+    from steltic_hub.main import app
+    from fastapi.testclient import TestClient
+    with TestClient(app) as c:
+        mods = {m["id"]: m for m in c.get("/api/state").json()["modules"]}
+    for mid in ("steltic_admin", "steltic_variations", "steltic_probabilistic"):
+        assert mid in mods, f"{mid} missing from /api/state"
+        assert mods[mid]["has_server"] is True, f"{mid} is server-backed"
+        assert "server_up" in mods[mid], f"{mid} must publish server_up for the rail"
+
+
+# ---------------------------------------------------------------- a tab with more than one button
+def test_a_tab_may_carry_extra_buttons_beside_its_run():
+    """`actions` lets one tab offer two things to do with the same fields and the same log pane.
+
+    The Nonlinear Run tab needs it: `Run analyses` does the OpenSees work with no standards
+    lookups, and `Revise reports` re-renders those reports with the live IS corpus behind them. Two
+    tabs would make the engineer hop between them for one job.
+    """
+    srv = {"command": ["-m", "x"], "health": "/healthz"}
+    def mk(actions):
+        return {"schema": 1, "id": "x", "name": "X", "env": {"python": "3.12", "install": []}, "server": srv,
+                "tabs": [{"id": "go", "kind": "form", "run": {"kind": "cli", "command": ["-m", "x"]},
+                          "actions": actions}]}
+    m = Manifest.parse(mk([{"id": "again", "label": "Again", "info": "after the first one",
+                            "run": {"kind": "cli", "command": ["-m", "x", "again"]}}]), "t")
+    a = m.tabs[0].actions[0]
+    assert a.id == "again" and a.label == "Again" and a.info == "after the first one"
+    assert a.run.command[-1] == "again"
+    j = m.to_json()["tabs"][0]["actions"][0]
+    assert j["id"] == "again" and j["label"] == "Again" and j["can_cancel"] is True
+    for bad in ([{"run": {"kind": "cli", "command": ["-m", "x"]}}],                      # no id
+                [{"id": "a"}],                                                            # nothing to run
+                [{"id": "run", "run": {"kind": "cli", "command": ["-m", "x"]}}],          # the main button's name
+                [{"id": "a", "run": {"kind": "cli", "command": ["-m", "x"]}},
+                 {"id": "a", "run": {"kind": "cli", "command": ["-m", "x"]}}],            # duplicate
+                [{"id": "a", "run": {"kind": "cli", "command": ["-m", "x"], "continues": "go"}}]):
+        with pytest.raises(ManifestError):
+            Manifest.parse(mk(bad), "t")
+    # an action with no main run to sit beside is just a run
+    with pytest.raises(ManifestError):
+        Manifest.parse({"schema": 1, "id": "x", "name": "X", "env": {"python": "3.12", "install": []}, "server": srv,
+                        "tabs": [{"id": "go", "kind": "form",
+                                  "actions": [{"id": "a", "run": {"kind": "cli", "command": ["-m", "x"]}}]}]}, "t")
+
+
+def test_the_nonlinear_run_tab_offers_revise_beside_run_analyses():
+    """Run analyses does no standards lookups, so its reports mark every clause UNVERIFIED. Revise
+    re-issues them against the review, grounded in the live IS corpus. Same tab, same project."""
+    cat = load_catalog(config.CATALOG_DIR)
+    run = next(t for t in cat["steltic_nonlinear_india"].tabs if t.id == "run")
+    assert run.run.label == "Run analyses"
+    rev = next(a for a in run.actions if a.id == "revise")
+    assert rev.label == "Revise reports"
+    assert rev.run.env.get("RAG_API_URL") == "{server.engineering_rag_india}/query", "it must query the live IS corpus"
+    assert rev.run.llm is True
+    assert "Review" in rev.info and "UNVERIFIED" in rev.info, "the note must say to run Review first"
+    assert "ASCE" not in rev.info and "AISC" not in rev.info, "India: IS documents only (D3)"
+    # and the Review tab it waits on still writes review.md into the same project folder
+    review = next(t for t in cat["steltic_nonlinear_india"].tabs if t.id == "review")
+    assert "review.md" in {a["path"] for a in review.artifacts} and review.run.cwd == "{job_dir}"

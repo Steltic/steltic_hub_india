@@ -349,6 +349,28 @@
           "path": "design_criteria_16_1_4.docx",
           "accent": "#a5b6f0"
         }
+      ],
+      "actions": [
+        {
+          "id": "revise",
+          "label": "Revise reports",
+          "info": "Press this after the Review tab has finished on this project. Run analyses does the OpenSees work with no standards lookups, so its reports mark every clause it cites UNVERIFIED. Revise re-issues those same reports against review.md, looking each clause up live in the IS corpus (engineering_rag_india: IS 1893 (Part 1):2016, IS 800:2007, IS 18168:2023) and clearing the ones it can ground. A clause the corpus does not hold stays marked, and so do the hinge backbones: IS 800 / IS 1893 give none, so they remain modelling assumptions (information / EOR input), never acceptance criteria. No analysis is re-run.",
+          "run": {
+            "kind": "cli",
+            "cwd": "{job_dir}",
+            "label": "Revise reports",
+            "llm": true,
+            "env": {
+              "RAG_API_URL": "{server.engineering_rag_india}/query"
+            },
+            "command": [
+              "-m",
+              "snl",
+              "revise",
+              "{job_dir}"
+            ]
+          }
+        }
       ]
     },
     {
@@ -442,6 +464,15 @@
           "nlrha",
           "hazard",
           "{job_dir}"
+        ],
+        "stage": [
+          {
+            "from": "{f.package}",
+            "to": "{job_dir}",
+            "required": true,
+            "label": "design package",
+            "missing": "No HR Steel (IS 800) design for this project yet: run HR Steel on it first (its design is picked up automatically), or choose the .zip HR Steel produced. The IS 1893 spectrum needs the building's periods and the zone / soil type / I of its seismic_calc.json, which come from the design."
+          }
         ]
       },
       "fields": [
@@ -450,6 +481,15 @@
           "type": "project",
           "label": "Project",
           "required": true
+        },
+        {
+          "id": "package",
+          "type": "file",
+          "label": "HR Steel (IS 800) design package",
+          "accept": ".zip",
+          "default": "{out.steltic_india}",
+          "placeholder": "this project's HR Steel design (automatic)",
+          "help": "Leave as is to analyse the HR Steel (IS 800) design already in this project, or choose the .zip HR Steel produced (report.html, cfg.py, model_opensees.py, seismic_calc.json, load_plan.json, design/…)."
         },
         {
           "id": "zone",
@@ -563,6 +603,15 @@
           "nlrha",
           "criteria",
           "{job_dir}"
+        ],
+        "stage": [
+          {
+            "from": "{f.package}",
+            "to": "{job_dir}",
+            "required": true,
+            "label": "design package",
+            "missing": "No HR Steel (IS 800) design for this project yet: run HR Steel on it first (its design is picked up automatically), or choose the .zip HR Steel produced."
+          }
         ]
       },
       "fields": [
@@ -571,6 +620,15 @@
           "type": "project",
           "label": "Project",
           "required": true
+        },
+        {
+          "id": "package",
+          "type": "file",
+          "label": "HR Steel (IS 800) design package",
+          "accept": ".zip",
+          "default": "{out.steltic_india}",
+          "placeholder": "this project's HR Steel design (automatic)",
+          "help": "Leave as is to analyse the HR Steel (IS 800) design already in this project, or choose the .zip HR Steel produced (report.html, cfg.py, model_opensees.py, seismic_calc.json, load_plan.json, design/…)."
         },
         {
           "id": "project",
@@ -713,6 +771,15 @@
           "{job_dir}",
           "--steltic-engine",
           "{need.steltic_india}/steel_engine"
+        ],
+        "stage": [
+          {
+            "from": "{f.package}",
+            "to": "{job_dir}",
+            "required": true,
+            "label": "design package",
+            "missing": "No HR Steel (IS 800) design for this project yet: run HR Steel on it first (its design is picked up automatically), or choose the .zip HR Steel produced."
+          }
         ]
       },
       "fields": [
@@ -721,6 +788,15 @@
           "type": "project",
           "label": "Project",
           "required": true
+        },
+        {
+          "id": "package",
+          "type": "file",
+          "label": "HR Steel (IS 800) design package",
+          "accept": ".zip",
+          "default": "{out.steltic_india}",
+          "placeholder": "this project's HR Steel design (automatic)",
+          "help": "Leave as is to analyse the HR Steel (IS 800) design already in this project, or choose the .zip HR Steel produced (report.html, cfg.py, model_opensees.py, seismic_calc.json, load_plan.json, design/…)."
         },
         {
           "id": "analyses",
