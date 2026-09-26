@@ -352,6 +352,76 @@
       ]
     },
     {
+      "id": "review",
+      "title": "Review",
+      "kind": "form",
+      "blurb": "The model reads what the run measured — the IS 1893 elastic DBE / MCE response (drifts against the 7.11.1.1 reference 0.004 h), the pushover curve and mechanism, the DDM system-capacity check (λu), the design-criteria draft — looks up the clauses it cites in the IS corpus (engineering_rag_india: IS 1893, IS 800, IS 18168, IS 2062, IS 808, IS 875), and writes an engineer's review with citations: what the analyses show, the margins, what to change and why. IS 1893 (Part 1):2016 provides no acceptance criteria for nonlinear analysis; results are for information, so the review reports response quantities and gives no pass/fail verdict. Its reasoning and its text stream here as it works; the review lands in the project folder.",
+      "run": {
+        "kind": "cli",
+        "cwd": "{job_dir}",
+        "label": "Write the review",
+        "llm": true,
+        "env": {
+          "RAG_API_URL": "{server.engineering_rag_india}/query"
+        },
+        "command": [
+          "-m",
+          "snl",
+          "review",
+          "{job_dir}"
+        ]
+      },
+      "fields": [
+        {
+          "id": "job",
+          "type": "project",
+          "label": "Project",
+          "required": true
+        },
+        {
+          "id": "focus",
+          "type": "textarea",
+          "label": "Focus (optional)",
+          "arg": "--focus",
+          "rows": 4,
+          "placeholder": "e.g. Is the storey-3 drift concentration at MCE a mechanism problem or an accidental-torsion artefact? Would deeper columns in the lower two storeys be the cheaper fix?",
+          "help": "Anything you want the review to concentrate on. Empty = the standard review: response quantities, margins against the IS reference values, mechanism, what to change."
+        },
+        {
+          "id": "no_standards",
+          "type": "checkbox",
+          "label": "Answer from the run alone (do not query the standards)",
+          "arg": "--no-standards",
+          "arg_style": "flag-if-true",
+          "help": "Normally the model grounds every clause it cites in the IS corpus (engineering_rag_india). Tick to skip that (faster; citations then come from the model's memory and are flagged as unverified)."
+        },
+        {
+          "id": "max_searches",
+          "type": "number",
+          "label": "Standards searches, at most",
+          "arg": "--max-searches",
+          "default": 8
+        }
+      ],
+      "artifacts": [
+        {
+          "label": "Review",
+          "path": "review.html",
+          "accent": "#9fb0ef"
+        },
+        {
+          "label": "Review (.md)",
+          "path": "review.md",
+          "accent": "#9fb0ef"
+        },
+        {
+          "label": "Passages used",
+          "path": "review_transcript.json",
+          "accent": "#a89f92"
+        }
+      ]
+    },
+    {
       "id": "feedback",
       "title": "Feedback",
       "kind": "embed",

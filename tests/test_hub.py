@@ -1176,11 +1176,14 @@ def test_run_llm_is_declared_only_where_it_means_something():
         Manifest.parse(base, "t")
     base["tabs"][0]["run"] = {"kind": "cli", "command": ["-m", "x"], "llm": True}
     assert Manifest.parse(base, "t").to_json()["tabs"][0]["run"]["llm"] is True
-    # the catalog: no India CLI tab talks to the model (steltic_nonlinear_india 0.2 has no `snl review`; the design
-    # agents are HTTP servers with their own credentials endpoint), so no bundled tab declares run.llm
+    # the catalog: the Nonlinear module's Review tab is the one that uses it (steltic_nonlinear_india 0.3 has
+    # `snl review`), and it names the IS corpus server -- never the USA Query file manager
     cat = load_catalog(config.CATALOG_DIR)
-    assert [t.id for m in cat.values() for t in m.tabs if t.run and t.run.llm] == []
-    assert all(t.id != "review" for t in cat["steltic_nonlinear_india"].tabs)
+    review = next(t for t in cat["steltic_nonlinear_india"].tabs if t.id == "review")
+    assert review.run.llm is True and review.run.env["RAG_API_URL"] == "{server.engineering_rag_india}/query"
+    assert runners.servers_referenced(cat["steltic_nonlinear_india"], review) == ["engineering_rag_india"]
+    assert [t.id for t in cat["steltic_nonlinear_india"].tabs if t.run and t.run.llm] == ["review"]
+    assert [t.id for m in cat.values() for t in m.tabs if t.run and t.run.llm] == ["review"]
 
 
 def test_run_continues_names_the_tab_a_resume_picks_up():

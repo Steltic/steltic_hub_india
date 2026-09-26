@@ -510,8 +510,17 @@ The Nonlinear module's manifest (`catalog/steltic_nonlinear_india.json`) declare
 * **Inspect**, **Compare**, **Mesh convergence** (form) — read the design basis out of a package, rebuild
   `four_analyses.html` and the viewer hub from what exists, run the fibre mesh ladder.
 
-`steltic_nonlinear_india` 0.2 has no `snl review` command, so the US hub's Review tab is not in this
-catalog. The module's install spec is `-e .[hub]` (fastapi/uvicorn for the tab server).
+* **Review** (form, `run.llm`) — `snl review`: the model reads what the run measured (the IS 1893 DBE /
+  MCE response, the pushover curve and mechanism, the DDM λu, the design-criteria draft), looks the
+  clauses it cites up in the IS corpus through `RAG_API_URL = {server.engineering_rag_india}/query`
+  (IS 1893, IS 800, IS 18168, IS 2062, IS 808, IS 875 -- never the US Query file manager), and writes
+  `review.md` / `review.html` in the project folder: the response quantities, the margins against the IS
+  reference values, what to change and why, each clause cited from the passage it read
+  (`review_transcript.json` keeps them). No pass/fail verdict (D7). It streams as the design agents do:
+  model text on the run line, the model's reasoning in its own box, one line per standards search.
+  Needs `steltic_nonlinear_india` 0.3 (the `review` command) and the LLM connection.
+
+The module's install spec is `-e .[hub]` (fastapi/uvicorn for the tab server).
 
 ## Names
 
@@ -578,7 +587,7 @@ identity; the differences are in what it fronts and what the bundled modules rea
 | brief fields | SDC, Ss / S1, site class, risk category, ft / psf / mph | zone II–V, Z, soil type I–III, importance factor I, R, Vb (m/s), imposed loads (kN/m²), IS 2062 grade; every label in SI |
 | corpus | `steltic_grokbot` + the "phase2" OpenSees / examples data; the user converts AISC / ASCE / AISI PDFs | the private `engineering_rag_india` repo carries the converted BIS documents and indexes; the post-install copies documents / indexes / search then scripts (code wins); no OpenSees or examples collections |
 | grounding bridge | collections `engineering_standards_A360 …` → `AISC_360_22 …` | `engineering_standards_IS800 …` → `IS_800_2007 …`; the corpus's US-term trap and town lookup relayed in `note` |
-| Nonlinear tabs | Run, Review (`snl review`, LLM), Feedback, Site hazard (USGS), Design criteria, Inspect, Compare, Mesh | Run (IS 1893 DBE / MCE levels), Feedback, IS 1893 spectrum, Design criteria, Inspect, Compare, Mesh — no Review (no such command in 0.2), no USGS; informative results, no verdict (D7) |
+| Nonlinear tabs | Run, Review (`snl review`, LLM), Feedback, Site hazard (USGS), Design criteria, Inspect, Compare, Mesh | Run (IS 1893 DBE / MCE levels), Review (`snl review`, LLM, IS corpus), Feedback, IS 1893 spectrum, Design criteria, Inspect, Compare, Mesh — no USGS; informative results, no verdict (D7) |
 | Design variations | AISC package (kip, ft, psf, `framework_screen`, ρ / Ax) | India package (`drift_table`, `seismic_calc`, `load_plan`, `irregularity`, `gates`, `design_status`; t, kg/m², kN, INR rates); IS library and prompts |
 | Probabilistic | LRFD, φ taken out of φRn, ASCE 7-22 combinations | IS 800 design strengths with γm, the package's `load_plan` combinations, IS 1893 drift limit |
 | Admin | `ex22`-style briefs, AISC / ASCE / AISI stems, audit | `in1`-style briefs, IS stems, `validate.py --corpus` |
