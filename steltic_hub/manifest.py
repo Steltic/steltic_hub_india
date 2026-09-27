@@ -151,6 +151,13 @@ class Run:
     # tab to press after a stop, a timeout or a pause instead of starting the step over. Only the
     # module knows that such a tab exists and that pressing it with no fields is a plain resume.
     continues: str = ""
+    # Files that must already be in the project before this run may start, each with the sentence
+    # to show while one is missing -- [{"path": "hinge_params_collected.json", "missing": "..."}].
+    # This is how a tab says "do the other button first" without the hub knowing what either does:
+    # the Nonlinear Run tab will not run the analyses until Collect specification values has written
+    # the parameter file, because an analysis on placeholders is what produced the UNVERIFIED reports.
+    # Paths are relative to the project folder; the UI greys the button, /api/run refuses the start.
+    requires: list = field(default_factory=list)
 
     @staticmethod
     def parse(d: dict) -> "Run":
@@ -173,12 +180,46 @@ class Run:
         for s in r.stage or []:
             if not isinstance(s, dict) or not s.get("from") or not s.get("to"):
                 raise ManifestError(f"run.stage entries need from and to: {s!r}")
+        if not isinstance(r.requires, list):
+            raise ManifestError("run.requires must be a list of {path, missing}")
+        for q in r.requires:
+            if not isinstance(q, dict) or not isinstance(q.get("path"), str) or not q["path"].strip():
+                raise ManifestError(f"run.requires entries need a path: {q!r}")
+            pth = q["path"].replace("\\", "/")
+            if pth.startswith("/") or ".." in pth.split("/") or (len(pth) > 1 and pth[1] == ":"):
+                raise ManifestError(f"run.requires path must be inside the project folder: {q['path']!r}")
+            if not isinstance(q.get("missing", ""), str):
+                raise ManifestError(f"run.requires {q['path']!r}: `missing` must be the sentence shown while it is absent")
         r.retry = _parse_retry(r.retry)
         if r.retry and r.kind != "cli":
             # Only run_cli owns the process it would have to spawn again; a retry asked for anywhere
             # else would be read, accepted and then quietly never happen.
             raise ManifestError(f"run.retry needs kind cli, not {r.kind!r}")
         return r
+
+
+@dataclass
+class Action:
+    """A second (third, ...) button in a tab, beside its main `run`.
+
+    Some steps belong together on one screen rather than in two tabs the engineer hops between:
+    the Nonlinear Run tab does the OpenSees work with no standards lookups, and its Revise button
+    re-renders those same reports with the live corpus behind them. Same fields, same log pane,
+    same outputs -- a different thing to do with them. `info` is the note shown under the buttons,
+    which is where a "do this after X" belongs.
+    """
+    id: str
+    run: "Run"
+    info: str = ""
+    label: str = ""
+    # Which of the tab's fields this action's command actually takes. The tab's fields are drawn for
+    # the main run, and a second command is rarely the same program: `snl revise <job>` takes no
+    # options at all, so passing it the Run tab's --site-class/--n-records/--dt made argparse exit 2
+    # before it did anything. So an action declares what it wants and gets nothing else:
+    #   omitted / []      no field flags (the command's own templated arguments only)
+    #   ["*"]             every field on the tab, as the main run gets
+    #   ["job","params"]  exactly those, in the tab's own order
+    fields: list = field(default_factory=list)
 
 
 @dataclass
@@ -201,6 +242,7 @@ class Tab:
     links: list = field(default_factory=list)       # [{label, path}] paths on the module server, e.g. a download
     blurb: str = ""
     requires_optional: list = field(default_factory=list)   # optional-component groups (manifest `optional`) a run needs
+    actions: list = field(default_factory=list)     # extra buttons beside `run` (see Action)
 
     @staticmethod
     def parse(d: dict) -> "Tab":
@@ -224,6 +266,32 @@ class Tab:
                 raise ManifestError(f"tab {t.id}: field {f.id} fills unknown field {f.fills['target']!r}")
             if f.text_target and f.text_target not in ids:
                 raise ManifestError(f"tab {t.id}: field {f.id} targets unknown field {f.text_target!r}")
+        for a in (d.get("actions") or []):
+            if not isinstance(a, dict) or not a.get("id"):
+                raise ManifestError(f"tab {t.id}: every action needs an id")
+            if not a.get("run"):
+                raise ManifestError(f"tab {t.id}: action {a['id']!r} has nothing to run")
+            if not t.run:
+                raise ManifestError(f"tab {t.id}: actions need a main `run` to sit beside")
+            r = Run.parse(a["run"])
+            if r.continues:
+                raise ManifestError(f"tab {t.id}: action {a['id']!r} may not declare `continues` -- "
+                                    "that names the tab a resume picks up, and an action is not a tab")
+            af = list(a.get("fields") or [])
+            if any(not isinstance(x, str) for x in af):
+                raise ManifestError(f"tab {t.id}: action {a['id']!r} fields must be a list of field ids (or [\"*\"])")
+            unknown = [x for x in af if x != "*" and x not in ids]
+            if unknown:
+                raise ManifestError(f"tab {t.id}: action {a['id']!r} names unknown field(s) {', '.join(map(repr, unknown))}")
+            if "*" in af and len(af) > 1:
+                raise ManifestError(f"tab {t.id}: action {a['id']!r} fields is \"*\" or a list of ids, not both")
+            t.actions.append(Action(id=a["id"], run=r, info=a.get("info", ""), fields=af,
+                                    label=a.get("label") or r.label or a["id"].capitalize()))
+        aids = [a.id for a in t.actions]
+        if len(aids) != len(set(aids)):
+            raise ManifestError(f"tab {t.id}: duplicate action ids")
+        if "run" in aids:
+            raise ManifestError(f"tab {t.id}: 'run' is the main button, not an action id")
         for k in (t.run.retry.get("then_set") if t.run else None) or {}:
             # a retry override on a field that does not exist would change nothing, silently
             if k not in ids:
@@ -377,7 +445,11 @@ class Manifest:
                 "blurb": t.blurb, "artifacts": t.artifacts, "links": t.links,
                 "run": ({"kind": t.run.kind, "label": t.run.label, "llm": bool(t.run.llm),
                          "continues": t.run.continues or None,
+                         "requires": [{"path": q["path"], "missing": q.get("missing") or ""} for q in t.run.requires],
                          "can_cancel": t.run.kind == "cli" or bool(t.run.cancel)} if t.run else None),
+                "actions": [{"id": a.id, "label": a.label, "info": a.info, "kind": a.run.kind,
+                             "llm": bool(a.run.llm), "fields": list(a.fields),
+                             "can_cancel": a.run.kind == "cli" or bool(a.run.cancel)} for a in t.actions],
                 "fields": [{
                     "id": f.id, "type": f.type, "label": f.label, "placeholder": f.placeholder,
                     "help": f.help, "required": f.required,

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Steltic Hub India
+GenericName=Structural steel design hub (IS codes)
+Comment=Install and run the Steltic India (IS 800 / IS 1893) design modules
+# Absolute path required by the desktop spec. install.sh rewrites this line to where you cloned.
+Exec=/opt/steltic_hub_india/unix/steltic_india.sh
+Icon=steltic_india
+Terminal=false
+Categories=Engineering;Science;Development;
+StartupNotify=true

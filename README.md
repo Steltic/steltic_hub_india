@@ -54,15 +54,47 @@ publishing a repo; updating one is `git pull` plus a reinstall into its own venv
 
 ## Install and run
 
+**Windows**
+
 ```powershell
 git clone https://github.com/Steltic/steltic_hub_india
 cd steltic_hub_india
 windows\Steltic.bat            # first run fetches uv + Python + the hub, then opens the window
 ```
 
-Nothing needs to be installed first — no Python, no uv, no Docker. First run pulls about 20 MB;
-each module you install from the Modules tab pulls its own dependencies (openseespy-based modules
-are ~400 MB each).
+**Linux and macOS**
+
+```bash
+git clone https://github.com/Steltic/steltic_hub_india
+cd steltic_hub_india
+./unix/steltic_india.sh        # same three steps, same flags
+```
+
+`unix/steltic_india.sh` is the counterpart of `windows/Steltic.ps1`, step for step, and takes the
+same switches in POSIX spelling: `--reinstall`, `--restart`, `--no-window`, `--bootstrap-only`,
+`--console`, `--port N` (default 8301). Optionally `./unix/install.sh` links it as
+`~/.local/bin/steltic_india` and, on Linux, adds a desktop entry (`steltic_india.desktop`), so
+`steltic_india` from anywhere or the application menu both work; `./unix/install.sh --remove` undoes
+that and leaves your data alone. The names differ from the US hub's (`steltic`, `steltic.desktop`) so
+both can be installed for the same user.
+
+Nothing needs to be installed first — no Python, no uv, no Docker; on Linux you need `curl` or
+`wget`, which you almost certainly have. First run pulls about 20 MB; each module you install from
+the Modules page pulls its own dependencies (openseespy-based modules are ~400 MB each).
+
+Where things land differs by platform, and the launcher and the hub agree on it
+(`steltic_hub/config.py`):
+
+| | data root (`STELTIC_HUB_DATA`) |
+|---|---|
+| Windows | `%LOCALAPPDATA%\steltic_hub_india` |
+| macOS | `~/Library/Application Support/steltic_hub_india` |
+| Linux | `$XDG_DATA_HOME/steltic_hub_india`, or `~/.local/share/steltic_hub_india` |
+
+For the window itself the launcher asks a Chromium-family browser for a chromeless `--app=` window
+— Edge on Windows, Chrome/Edge/Brave/Chromium on macOS or Linux — and falls back to `open` /
+`xdg-open` / your default browser. None of that is required: `--no-window` starts the server alone
+and prints the URL.
 
 Cross-platform / developer run:
 
@@ -72,6 +104,12 @@ steltic-hub                    # http://127.0.0.1:8301
 steltic-hub --bootstrap        # headless: provision every module, then exit
 steltic-hub --restart          # stop the hub already on the port and start this one in its place
 ```
+
+One platform note worth knowing before you file a bug: OpenSees wheels are published for Linux,
+macOS and Windows, but not for every architecture — on Apple silicon `openseespy` installs under
+Rosetta or not at all depending on the release, so a module that needs it may refuse to provision
+where the hub itself runs perfectly well. The Modules page reports that per module rather than
+failing the hub.
 
 ### Coexisting with the US hub
 
@@ -496,7 +534,14 @@ The Nonlinear module's manifest (`catalog/steltic_nonlinear_india.json`) declare
   unless *Level* says otherwise. **IS 1893 (Part 1):2016 provides no acceptance criteria for nonlinear
   analysis; results are for information**: the reports give drifts, ductility demands, hinge rotations
   against the IS 800 Section 12 deformation capacities (0.02 / 0.04 rad) as reference, base shear
-  against VB and λu, and no verdict.
+  against VB and λu, and no verdict. The tab's second button, **Collect specification values**
+  (`snl collect`, `run.llm`, IS corpus), comes first: it reads IS 2062 fy / fu, IS 18168 Ry / Ru,
+  the IS 800 Section 12 capacity for the system and the IS 1893 Z / I / Sa/g / damping out of the
+  corpus with exact lookups, has the model copy each value with its cell, checks every quote, and
+  writes `hinge_params_collected.json`. *Run analyses* stays closed (`run.requires`) until that file
+  exists, and then runs on it. The hinge backbones are in no IS document and stay modelling
+  assumptions (information / EOR input). `snl revise` (CLI only) re-issues an older project's reports
+  against its review.
 * **IS 1893 spectrum** (form) — `nlrha hazard`: the zone / Z / soil type / I / R read from the package
   (or overridden) become `nlrha/site_hazard.json`, the DBE and MCE targets the Run tab scales to.
 * **Design criteria** (form) — `nlrha criteria`: the design-criteria draft (.docx + .html) from the
@@ -510,8 +555,17 @@ The Nonlinear module's manifest (`catalog/steltic_nonlinear_india.json`) declare
 * **Inspect**, **Compare**, **Mesh convergence** (form) — read the design basis out of a package, rebuild
   `four_analyses.html` and the viewer hub from what exists, run the fibre mesh ladder.
 
-`steltic_nonlinear_india` 0.2 has no `snl review` command, so the US hub's Review tab is not in this
-catalog. The module's install spec is `-e .[hub]` (fastapi/uvicorn for the tab server).
+* **Review** (form, `run.llm`) — `snl review`: the model reads what the run measured (the IS 1893 DBE /
+  MCE response, the pushover curve and mechanism, the DDM λu, the design-criteria draft), looks the
+  clauses it cites up in the IS corpus through `RAG_API_URL = {server.engineering_rag_india}/query`
+  (IS 1893, IS 800, IS 18168, IS 2062, IS 808, IS 875 -- never the US Query file manager), and writes
+  `review.md` / `review.html` in the project folder: the response quantities, the margins against the IS
+  reference values, what to change and why, each clause cited from the passage it read
+  (`review_transcript.json` keeps them). No pass/fail verdict (D7). It streams as the design agents do:
+  model text on the run line, the model's reasoning in its own box, one line per standards search.
+  Needs `steltic_nonlinear_india` 0.3 (the `review` command) and the LLM connection.
+
+The module's install spec is `-e .[hub]` (fastapi/uvicorn for the tab server).
 
 ## Names
 
@@ -578,7 +632,7 @@ identity; the differences are in what it fronts and what the bundled modules rea
 | brief fields | SDC, Ss / S1, site class, risk category, ft / psf / mph | zone II–V, Z, soil type I–III, importance factor I, R, Vb (m/s), imposed loads (kN/m²), IS 2062 grade; every label in SI |
 | corpus | `steltic_grokbot` + the "phase2" OpenSees / examples data; the user converts AISC / ASCE / AISI PDFs | the private `engineering_rag_india` repo carries the converted BIS documents and indexes; the post-install copies documents / indexes / search then scripts (code wins); no OpenSees or examples collections |
 | grounding bridge | collections `engineering_standards_A360 …` → `AISC_360_22 …` | `engineering_standards_IS800 …` → `IS_800_2007 …`; the corpus's US-term trap and town lookup relayed in `note` |
-| Nonlinear tabs | Run, Review (`snl review`, LLM), Feedback, Site hazard (USGS), Design criteria, Inspect, Compare, Mesh | Run (IS 1893 DBE / MCE levels), Feedback, IS 1893 spectrum, Design criteria, Inspect, Compare, Mesh — no Review (no such command in 0.2), no USGS; informative results, no verdict (D7) |
+| Nonlinear tabs | Run, Review (`snl review`, LLM), Feedback, Site hazard (USGS), Design criteria, Inspect, Compare, Mesh | Run (IS 1893 DBE / MCE levels), Review (`snl review`, LLM, IS corpus), Feedback, IS 1893 spectrum, Design criteria, Inspect, Compare, Mesh — no USGS; informative results, no verdict (D7) |
 | Design variations | AISC package (kip, ft, psf, `framework_screen`, ρ / Ax) | India package (`drift_table`, `seismic_calc`, `load_plan`, `irregularity`, `gates`, `design_status`; t, kg/m², kN, INR rates); IS library and prompts |
 | Probabilistic | LRFD, φ taken out of φRn, ASCE 7-22 combinations | IS 800 design strengths with γm, the package's `load_plan` combinations, IS 1893 drift limit |
 | Admin | `ex22`-style briefs, AISC / ASCE / AISI stems, audit | `in1`-style briefs, IS stems, `validate.py --corpus` |
