@@ -84,11 +84,10 @@ run it was watching may still be going on the module server. Check the project, 
 
 ### 2. Standards — the conversion queue
 
-Normally nothing needs converting: the private `engineering_rag_india` repo already carries the
-converted BIS documents and the hub's post-install copies them into the workspace. The queue is for a
-document the repo does not carry, or for re-converting one from your own licensed copy — a conversion
-takes hours (Docling at full accuracy, OCR on the scanned prints). The **Standards** tab scans a folder
-(default: the IS corpus workspace's own `grokbot/documents/standards`), guesses each PDF's canonical
+The hub ships no standard text: the IS corpus starts empty, and this queue is its first pass, from the
+BIS PDFs you licensed yourself — a conversion takes hours (Docling at full accuracy, OCR on the scanned
+prints). The **Standards** tab scans a folder (default: the IS corpus workspace's `grokbot/pdfs`, where
+the index repair also looks for a PDF), guesses each PDF's canonical
 stem from its file name (`IS_800_2007`, `IS_1893_Part_1_2016`, `IS_875_Part_3_2015`, `IS_18168_2023` …
 — correct any it got wrong; the retrieval ids and the `engineering_standards_IS*` collections depend
 on them), marks the ones already converted (`grokbot/documents/standards/<STEM>/markdown/<STEM>.search.md`),
@@ -97,7 +96,8 @@ and **Queue the conversions** turns the ticked rows into a plan: one `convert` s
 the watermark grep). It is an ordinary plan, so it runs, logs, stops and resumes like any other, and the
 hub's own converter behaviour applies unchanged — the native-crash retries, the resume from the last
 finished chunk, the refusal until the converter component is installed (Admin says so before you
-queue anything).
+queue anything). After it: the corpus-fix step and **Import fixed corpus** on the IS corpus module
+(the hub README's *Building the IS corpus*, and `CORPUS_FIX_LLM_INSTRUCTIONS.md` at the hub root).
 
 ### 3. Help — "how does Steltic work?"
 

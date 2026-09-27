@@ -278,9 +278,10 @@ def _grokbot_root() -> pathlib.Path:
 
 @app.get("/api/standards/scan")
 def standards_scan(folder: str = ""):
-    f = pathlib.Path(folder).expanduser() if folder else _grokbot_root() / "documents" / "standards"
+    # default: the corpus workspace's pdfs/ folder -- where the index repair also looks for a PDF
+    f = pathlib.Path(folder).expanduser() if folder else _grokbot_root() / "pdfs"
     d = standards.scan(f, _grokbot_root())
-    d["default_folder"] = str(_grokbot_root() / "documents" / "standards")
+    d["default_folder"] = str(_grokbot_root() / "pdfs")
     try:
         st = hub_state()
         qfm = next((m for m in st["modules"] if m["id"] == standards.CORPUS_MODULE), None)

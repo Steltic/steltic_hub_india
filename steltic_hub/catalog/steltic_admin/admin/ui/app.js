@@ -259,7 +259,7 @@ function cheatSheet() {
 function renderStandards(m) {
   const pane = el('div', { class: 'pane' });
   pane.append(el('h2', {}, 'Standards'),
-    el('p', { class: 'lead' }, 'Licensed BIS specification PDFs converted through the IS corpus module one after another. Normally nothing needs converting -- the private engineering_rag_india repo already carries the converted documents -- so this is for a document the repo does not carry, or a re-conversion from your own copy. Each conversion takes hours; the queue is a plan like any other, so it survives a restart and shows every run\'s log on the Batch tab.'));
+    el('p', { class: 'lead' }, 'Your licensed BIS specification PDFs converted through the IS corpus module one after another -- the first pass of the corpus, which starts empty: the hub ships no standard text. Each conversion takes hours; the queue is a plan like any other, so it survives a restart and shows every run\'s log on the Batch tab. It ends with Rebuild index and Validate corpus. Then the corpus-fix step (CORPUS_FIX_LLM_INSTRUCTIONS.md in the hub folder): zip the corpus folder with your PDFs and the instructions for an LLM agent, and bring its fixed corpus back with IS corpus → Import fixed corpus.'));
   const folder = el('input', { type: 'text', placeholder: 'folder with the PDFs' });
   const msg = el('span', { class: 'note' });
   const table = el('div');
@@ -272,7 +272,7 @@ function renderStandards(m) {
     if (!folder.value.trim()) folder.value = scan.folder;
     msg.textContent = scan.exists ? `${scan.items.length} PDF${scan.items.length === 1 ? '' : 's'} · converted so far: ${scan.converted.length ? scan.converted.join(', ') : 'none'}` : 'that folder does not exist';
     if (!scan.exists) return;
-    if (!scan.qfm_installed) table.append(el('div', { class: 'err-list' }, 'The IS corpus module (engineering_rag_india) is not installed -- Modules page → Install (git clone with your GitHub credentials, or link a working copy).'));
+    if (!scan.qfm_installed) table.append(el('div', { class: 'err-list' }, 'The IS corpus module is not installed -- Modules page → IS corpus → Install (it ships with the hub; installing builds its environment and an empty corpus).'));
     else if (scan.converter_missing && scan.converter_missing.length) table.append(el('div', { class: 'err-list' }, 'The PDF converter (Docling) is not installed in the IS corpus module\'s environment -- Modules page → IS corpus → Install PDF converter (a large download, once). The queue cannot start until it is.'));
     const tb = el('tbody');
     for (const it of scan.items) {
