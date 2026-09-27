@@ -11,11 +11,14 @@ IS 800 / IS 801 / IS 875 / IS 1893 modules behind it.
                     |
           steltic_hub (FastAPI, 127.0.0.1:8301)         <- registry, venvs, jobs, proxy, UI
          /            |              |            \
-   steltic_india  steltic_CFS_india  nonlinear    engineering_rag_india   <- one git checkout + one venv each
-   HR Steel       CFS (IS 801)       _india       (private) the IS corpus:
-   (IS 800)       + IS 800 braced    (CLI +       BIS documents, indexes and the
-      ^ \_________ frames ___________ Feedback)   grounding server the design agents ask
-      |
+   steltic_india  steltic_CFS_india  nonlinear    <- one git checkout + one venv each
+   HR Steel       CFS (IS 801)       _india
+   (IS 800)       + IS 800 braced    (CLI +
+      ^ \_________ frames ___________ Feedback)
+      |                   |
+      |             IS corpus      <- bundled in the hub: the corpus tooling and the grounding
+      |             (server)          server the design agents ask; the corpus itself you build
+      |                               from your own licensed BIS PDFs (it starts empty)
    variations    <- bundled in the hub: plans N variations, has HR Steel design each, scores and ranks
    (server)
       ^
@@ -28,7 +31,7 @@ IS 800 / IS 801 / IS 875 / IS 1893 modules behind it.
 | `steltic_india` | HR Steel (IS 800) | [Steltic/steltic_india](https://github.com/Steltic/steltic_india) | hot-rolled steel design agent: IS 800:2007 limit state, IS 875 loads, IS 1893 (Part 1):2016 + Amd 1/2 seismic, IS 18168:2023 detailing; 15 `IN_Ex1 … IN_Ex15` example briefs |
 | `steltic_CFS_india` | CFS (IS 801) + IS 800 braced frames | [Steltic/steltic_CFS_india](https://github.com/Steltic/steltic_CFS_india) | cold-formed members (studs, tracks, joists, purlins, girts) to IS 801 / IS 811 working stress, the lateral system a hot-rolled IS 800 Section 12 braced or moment frame; 15 `IN_CFS_Ex*` briefs |
 | `steltic_nonlinear_india` | Nonlinear (SNL-IN) | [Steltic/steltic_nonlinear_india](https://github.com/Steltic/steltic_nonlinear_india) | pushover, NLRHA and the direct design method on an HR Steel package, the IS 1893 elastic spectrum at DBE and MCE, the four-analyses sheet, the Feedback loops. **IS 1893 (Part 1):2016 provides no acceptance criteria for nonlinear analysis; results are for information** — no verdict is printed |
-| `engineering_rag_india` | IS corpus (Query file manager) | [Steltic/engineering_rag_india](https://github.com/Steltic/engineering_rag_india) (**private**) | the converted BIS documents, their indexes and the retrieval scripts; the hub's bundled `rag_server.py` answers the agents' `RAG_API_URL` from it |
+| `engineering_rag_india` | IS corpus (your own conversions) | bundled (`catalog/engineering_rag_india/`) | the corpus tooling (convert, index, search, validate, import) and `rag_server.py`, which answers the agents' `RAG_API_URL`. **No standard text ships with the hub**: you build the corpus from BIS PDFs you licensed yourself (see *Building the IS corpus*) |
 | `steltic_variations` | Design variations | bundled (`catalog/steltic_variations/`) | one brief → N variations, each designed by HR Steel, scored in SI / INR |
 | `steltic_probabilistic` | Probabilistic analysis | bundled (`catalog/steltic_probabilistic/`) | Monte Carlo of the as-built imperfections against the IS 800 design strengths |
 | `steltic_admin` | Admin | bundled (`catalog/steltic_admin/`) | batch plans, the standards conversion queue, help |
@@ -122,26 +125,15 @@ identity lives in one place, `steltic_hub/config.py` (`APP_NAME`, `DATA_DIR_NAME
 `PORT_BASE`); `windows\Steltic.ps1`, `tauri/` and the UI repeat it only where a shell must know it
 before the server is up.
 
-### The private corpus: two ways in
+### The IS corpus starts empty
 
-`engineering_rag_india` is a private repository. Its manifest says so (`source.private: true`), and the
-Modules page tells you before **Install** what that means:
-
-1. **Clone with your own credentials.** The hub runs `git clone` with this PC's git configuration, so a
-   GitHub account that can read the repo, signed in through Git Credential Manager (or a token in the
-   URL you register), is all it takes. Nothing is stored by the hub.
-2. **Link a working copy on disk.** Modules → **Use local copy…** (or `steltic-hub link
-   engineering_rag_india C:\code\engineering_rag_india`) points the hub at a checkout you already have —
-   from a `git bundle`, a zip, or a clone made elsewhere. The hub installs it with `pip install -e .`
-   and never fetches, resets or writes to it.
-
-Either way the module's post-install copies the checkout's `documents/`, `indexes/` and `search/` into
-the hub's workspace (`<data>/grokbot/`) as data, then the `scripts/` folder **last**, so code always
-wins over anything a data bundle carries, and proves it by comparing the workspace's `retrieval.py`,
-`build_index.py` and `search.py` with the checkout's before it reports success. There is no US
-"phase2" data step: the India corpus is the BIS documents only (no OpenSees documentation, no worked
-examples), and a request for those collections answers with an empty list and a note, not an error.
-Nothing from the corpus is inside this hub repo.
+BIS standards are licensed, so the hub carries no standard text: no converted documents, tables,
+transcriptions or figure data. The **IS corpus** module ships inside the hub with the corpus tooling
+only. Installing it lays out an empty corpus under `<data>/grokbot/` and builds an empty index, so the
+grounding server starts and answers "not in the corpus" until you have converted your own PDFs. How to
+build it: *Building the IS corpus* below. There is no US "phase2" data step: the India corpus is the BIS
+documents only (no OpenSees documentation, no worked examples), and a request for those collections
+answers with an empty list and a note, not an error.
 
 ### After a git pull or an edit: the hub restarts itself
 
@@ -262,7 +254,7 @@ bound to `hub.url` in that folder, which is how the launcher finds it when port 
 ## The module manifest
 
 A module describes itself in `steltic_module.json` at its repo root. The hub also ships a catalog
-of manifests for the four existing repos, so none of them has to change — but a manifest in the
+of manifests for the India module repos, so none of them has to change — but a manifest in the
 checkout always wins, which is how a module ships new tabs without a hub release.
 
 ```json
@@ -293,7 +285,9 @@ checkout always wins, which is how a module ships new tabs without a hub release
 ```
 
 Paste that into **Modules → Add a module** and it is installable. No hub release, no code change.
-`source.private: true` marks a repository the hub cannot clone anonymously (see *The private corpus*).
+`source.private: true` marks a repository the hub cannot clone anonymously: the clone uses this PC's
+own git credentials (a credential manager, or a token in the URL you register), or you link a working
+copy with **Use local copy…**. No module in the India catalog needs it.
 
 | tab `kind` | what it does |
 |---|---|
@@ -388,16 +382,104 @@ is there the next time the app opens. It is pushed to each module server that de
 without it), and goes nowhere else than to the provider you named. **Forget** in the dialog
 deletes it. Set the model to `MOCK` to drive the whole pipeline offline.
 
+## Building the IS corpus
+
+The design agents ground their clauses on the IS corpus, and the IS corpus is yours: the hub ships
+the tooling, you supply BIS PDFs you licensed yourself. The owner's recommended workflow has three steps.
+The first runs in the hub. The second is done by a frontier LLM agent outside the hub. The third brings
+the result back.
+
+The corpus folder is `<data>/grokbot` (the IS corpus **Corpus** tab prints it):
+
+| | corpus folder |
+|---|---|
+| Windows | `%LOCALAPPDATA%\steltic_hub_india\grokbot` |
+| macOS | `~/Library/Application Support/steltic_hub_india/grokbot` |
+| Linux | `~/.local/share/steltic_hub_india/grokbot` (or `$XDG_DATA_HOME/steltic_hub_india/grokbot`) |
+
+It holds `documents/standards/<STEM>/` (one folder per converted standard), `indexes/`, `search/`
+(the full-text index), `scripts/` (the bundled tooling, copied at install), `pdfs/`, `cache/` and `queue/`.
+
+### 1. First pass in the hub (Docling)
+
+1. **Modules → IS corpus → Install**, then **Install PDF converter (Docling 2.123.1)** once (a large
+   download, the ML stack).
+2. Put your licensed BIS PDFs in `<data>/grokbot/pdfs` (or any folder). **Admin → Standards** scans the
+   folder, guesses each PDF's canonical stem (`IS_800_2007`, `IS_1893_Part_1_2016`,
+   `IS_875_Part_3_2015` …; correct any it got wrong), and **Queue the conversions** runs one Convert per
+   PDF, then **Rebuild index**, then **Validate corpus**. Or, one PDF at a time: IS corpus →
+   **Convert** (with its canonical stem), then **Rebuild index**, then **Validate corpus**.
+3. Each conversion takes hours. A first pass usually fails some Validate probes: OCR on the scanned
+   prints, garbled formulas and table grids, image-only figures. Fixing them is step 2.
+
+### 2. The corpus fix (a frontier LLM agent)
+
+Make `corpus.zip` from the **contents** of the corpus folder: `documents/`, `indexes/`, `search/`,
+`scripts/` and `INDIA_MANIFEST.json` at the root of the zip. Leave out `cache/`, `queue/` and `pdfs/`.
+
+```powershell
+# Windows (PowerShell)
+$c = "$env:LOCALAPPDATA\steltic_hub_india\grokbot"
+Compress-Archive -Path "$c\documents","$c\indexes","$c\search","$c\scripts","$c\INDIA_MANIFEST.json" `
+                 -DestinationPath "$HOME\Desktop\corpus.zip"
+```
+
+```bash
+# Linux (macOS: cd ~/Library/Application\ Support/steltic_hub_india/grokbot)
+cd ~/.local/share/steltic_hub_india/grokbot
+zip -r ~/corpus.zip documents indexes search scripts INDIA_MANIFEST.json -x '*/__pycache__/*'
+```
+
+Give a frontier LLM agent with code execution three things: `corpus.zip`, your PDFs (the folder, or a
+zip of it), and [`CORPUS_FIX_LLM_INSTRUCTIONS.md`](CORPUS_FIX_LLM_INSTRUCTIONS.md) from the root of this
+repository. The more capable the agent the better. The work is long: it checks clause by clause and
+table by table against the PDFs, transcribes figures, and rebuilds and validates. It returns
+`corpus_fixed.zip` and `FIX_REPORT.md`. The content is licensed to you alone: use an agent whose terms
+keep your uploads private, and do not share the fixed corpus.
+
+### 3. Import the fixed corpus
+
+In the hub: **IS corpus → Import fixed corpus**. Pick `corpus_fixed.zip`, leave *Rebuild index (no
+repair) and Validate corpus afterwards* ticked, and press **Import**. It:
+- checks the zip;
+- stops the grounding server;
+- moves the current `documents/`, `indexes/`, `search/`, `cache/`, `INDIA_MANIFEST.json` and
+  `scripts/*.json` to `<data>/grokbot_backups/<time>/`;
+- unpacks the fixed corpus in their place, keeps `FIX_REPORT.md` beside it, and applies its
+  `scripts/*.json` (for example `quality.json`);
+- rebuilds the index without the per-document repair, validates, and starts the server again.
+
+The zip's `.py` files are never applied: they are set aside in the backup for review. Validate must
+end `CORPUS: PASS`.
+
+The same by hand:
+
+1. **Modules → IS corpus → Stop server** (and start no design meanwhile).
+2. Back up: move `documents`, `indexes`, `search`, `cache` and `INDIA_MANIFEST.json` out of the corpus
+   folder into a new folder, for example `grokbot_backups\<date>` beside it.
+3. Unzip `corpus_fixed.zip` into the corpus folder. It holds `documents/`, `indexes/`, `search/`,
+   `INDIA_MANIFEST.json` and maybe `scripts/*.json`. Never overwrite `scripts/*.py`.
+4. IS corpus → **Rebuild index** with *Skip the per-document repair* ticked.
+5. IS corpus → **Validate corpus**. It must end `CORPUS: PASS`.
+6. **Start server** (it also starts by itself with the next design run).
+
+To undo either way: stop the server, move the backup back, then Rebuild index.
+
+A hub update refreshes `scripts/*.py` in the corpus folder. It never touches the corpus data or
+`scripts/*.json`. You can bring in a corpus folder you built earlier (on this PC or another) the same
+way: zip its contents and Import it, or copy its `documents/`, `indexes/` and `search/` into the corpus
+folder and Rebuild index.
+
 ## Spec grounding
 
 The design agents ground their clauses through one small HTTP API (`RAG_API_URL`) that was written
 for a hosted vector database. The hub answers that API locally instead: the **IS corpus** module ships
 `rag_server.py` (`catalog/engineering_rag_india/`), which serves the agents' `POST /query` from the
-full-text and exact-id index the corpus repo's `scripts/build_index.py` builds over the converted BIS
-documents. No embeddings, no vector store, nothing leaves the machine.
+full-text and exact-id index that the bundled `scripts/build_index.py` builds over the BIS documents
+you converted. No embeddings, no vector store, nothing leaves the machine.
 
 The collections the agents ask for (the names in `steltic_india`'s `india_collections.py`) map onto
-the corpus stems of the repo's README: `engineering_standards_IS800` → `IS_800_2007`,
+the canonical corpus stems: `engineering_standards_IS800` → `IS_800_2007`,
 `IS875_P1 … P5` → `IS_875_Part_1_2026 … Part_5_1987`, `IS1893` → `IS_1893_Part_1_2016` (Amd 1 and 2
 consolidated in the served text), `IS18168` → `IS_18168_2023`, `IS801`, `IS811`, `IS808`, `IS1161`,
 `IS2062`, `IS816`, `IS9595`, `IS4000`. A `clause` becomes an exact section / equation / table lookup
@@ -405,8 +487,10 @@ first, everything else goes through the corpus's own retrieval with its alias ta
 (IS 875-3 Annex A / IS 1893 Annex E, spelling variants included; a town in neither annex answers
 `not_tabulated`) and US-term trap (`SDS`, `Cd`, `Ω0` … answer `found:false` with the IS equivalent).
 The bridge relays that reason in `note` so an agent knows *why* it got nothing. Every hit is verbatim
-BIS text and carries `authoritative: true`; the corpus README's quality table (REPAIRED / DEGRADED per
-stem) is on the module's Corpus tab and on `/healthz`.
+text of your converted document and carries `authoritative: true`. The quality grade per stem (PASS /
+REPAIRED / DEGRADED / UNREVIEWED, from the corpus-fix step's `quality.json`) is on the Corpus tab and on
+`/healthz`. A stem you have not converted answers `<stem> is not in the corpus`. An empty corpus answers
+every question "not in the corpus", never an error.
 
 HR Steel and CFS declare `server.requires: ["engineering_rag_india"]` and
 `RAG_API_URL: "{server.engineering_rag_india}/query"`: when they start, the hub starts the grounding
@@ -415,9 +499,10 @@ unset and the agents run the way their repos do without a RAG (clauses from memo
 verification); install it later and the design servers restart with it on their next run. The
 module's **Grounding** tab shows what the agents asked and what they got back; **Query** runs
 `search.py` (full text, keyword, exact section / equation / table id) against the workspace;
-**Validate** runs `validate.py --corpus`, the must-hit probes and the watermark grep that fail the
-build on a miss. The Convert / Re-process / Rebuild index tabs are for a document the repo does not
-carry or a re-conversion from your own licensed copy — normally nothing needs converting.
+**Validate** runs `validate.py --corpus`: must-hit probes for the stems you converted (the others are
+skipped) and the watermark grep. It fails the build on a miss and reports what the corpus fix normally
+adds as advisories. **Convert**, **Re-process**, **Rebuild index** and **Import fixed corpus** are the
+steps of *Building the IS corpus*.
 
 ## Design variations
 
@@ -513,9 +598,8 @@ it starts goes through `POST /api/run/…` exactly as a click on that tab would.
   step, and a pause is continued a few times by itself.
 * **Standards** — a folder of licensed BIS PDFs becomes a queue of corpus conversions (one `convert`
   per PDF with its canonical stem — `IS_800_2007`, `IS_1893_Part_1_2016`, `IS_875_Part_3_2015`,
-  `IS_18168_2023` … — then `index`, then `validate`). Normally nothing needs converting, because the
-  private corpus repo already carries the converted documents; this is for a document it does not
-  carry.
+  `IS_18168_2023` … — then `index`, then `validate`). This is the first pass of *Building the IS
+  corpus*; the corpus starts empty.
 * **Help** — questions about how Steltic works, answered from the hub source, the module checkouts
   on this PC and (on request) the public GitHub repos, with the passages it used.
 
@@ -627,16 +711,16 @@ identity; the differences are in what it fronts and what the bundled modules rea
 | package / version | `steltic-hub` 0.2.2 | `steltic-hub-india` 0.1.0 (Python package still `steltic_hub`) |
 | title, port, data dir | Steltic Hub, 8300, `Steltic`, module ports 8410+ | Steltic Hub India, 8301, `steltic_hub_india`, module ports 8460+ |
 | accents | the viewer bundle's orange / green / blue | saffron `#ff9933` (HR Steel), India green `#3cb043` (CFS), navy-blue `#7b93e8` (Nonlinear, corpus) on the same dark shell |
-| catalog | `steltic`, `steltic_cfs`, `steltic_nonlinear`, `steltic_grokbot` | `steltic_india`, `steltic_CFS_india`, `steltic_nonlinear_india`, `engineering_rag_india` (private) |
+| catalog | `steltic`, `steltic_cfs`, `steltic_nonlinear`, `steltic_grokbot` | `steltic_india`, `steltic_CFS_india`, `steltic_nonlinear_india`; `engineering_rag_india` (IS corpus) is bundled |
 | example briefs | `ex1 … ex35` / `redesign` (HR), `ex1 … ex30` (CFS) | `in1 … in15` (the 15 `IN_Ex*` / `IN_CFS_Ex*` briefs) |
 | brief fields | SDC, Ss / S1, site class, risk category, ft / psf / mph | zone II–V, Z, soil type I–III, importance factor I, R, Vb (m/s), imposed loads (kN/m²), IS 2062 grade; every label in SI |
-| corpus | `steltic_grokbot` + the "phase2" OpenSees / examples data; the user converts AISC / ASCE / AISI PDFs | the private `engineering_rag_india` repo carries the converted BIS documents and indexes; the post-install copies documents / indexes / search then scripts (code wins); no OpenSees or examples collections |
+| corpus | `steltic_grokbot` + the "phase2" OpenSees / examples data; the user converts AISC / ASCE / AISI PDFs | the hub bundles the corpus tooling and ships no standard text; the user converts their own licensed BIS PDFs, has a frontier LLM agent fix the first pass (`CORPUS_FIX_LLM_INSTRUCTIONS.md`) and imports the result; no OpenSees or examples collections |
 | grounding bridge | collections `engineering_standards_A360 …` → `AISC_360_22 …` | `engineering_standards_IS800 …` → `IS_800_2007 …`; the corpus's US-term trap and town lookup relayed in `note` |
 | Nonlinear tabs | Run, Review (`snl review`, LLM), Feedback, Site hazard (USGS), Design criteria, Inspect, Compare, Mesh | Run (IS 1893 DBE / MCE levels), Review (`snl review`, LLM, IS corpus), Feedback, IS 1893 spectrum, Design criteria, Inspect, Compare, Mesh — no USGS; informative results, no verdict (D7) |
 | Design variations | AISC package (kip, ft, psf, `framework_screen`, ρ / Ax) | India package (`drift_table`, `seismic_calc`, `load_plan`, `irregularity`, `gates`, `design_status`; t, kg/m², kN, INR rates); IS library and prompts |
 | Probabilistic | LRFD, φ taken out of φRn, ASCE 7-22 combinations | IS 800 design strengths with γm, the package's `load_plan` combinations, IS 1893 drift limit |
 | Admin | `ex22`-style briefs, AISC / ASCE / AISI stems, audit | `in1`-style briefs, IS stems, `validate.py --corpus` |
-| `source.private` | — | new manifest key: the clone uses the PC's own credentials, or link a working copy |
+| `source.private` | — | new manifest key (a module repo cloned with the PC's own credentials, or linked as a working copy); unused by the India catalog |
 | review history | `REVIEW.md`, `REVIEW-2026-09-18.md` | not carried over — the US reviews live in the US repo |
 
 ## Layout
@@ -647,12 +731,13 @@ steltic_hub/
   manifest.py    the module contract                       runners.py   server supervision + run execution
   envs.py        per-module venvs via uv                   jobs.py      shared project folders
   main.py        FastAPI app
-  catalog/       manifests for the four India repos, plus assets a manifest needs
-                 (engineering_rag_india/rag_server.py: the grounding server) and the bundled
-                 Design variations (steltic_variations/), Probabilistic analysis
-                 (steltic_probabilistic/) and Admin (steltic_admin/) modules
+  catalog/       manifests for the three India module repos, and the bundled modules: the IS
+                 corpus (engineering_rag_india/: scripts/ the corpus tooling, rag_server.py the
+                 grounding server), Design variations (steltic_variations/), Probabilistic
+                 analysis (steltic_probabilistic/) and Admin (steltic_admin/)
   ui/            the shell (index.html, app.js, styles.css)
 windows/         first-run bootstrap + launcher (Steltic.bat / Steltic.ps1, Run-SelfTest.bat)
+CORPUS_FIX_LLM_INSTRUCTIONS.md   the corpus-fix instructions for an LLM agent (Building the IS corpus)
 tauri/           optional native shell
 ```
 

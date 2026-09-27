@@ -276,3 +276,17 @@ def test_rebuild_skips_the_pdf_repair_when_the_pdf_is_not_found(tmp_path):
     assert "repair skipped for IS_816_1969: source PDF not found" in r.stderr
     secs = json.loads((root / "indexes" / "sections.json").read_text(encoding="utf-8"))
     assert {s["section_id"] for s in secs if s["doc"] == "IS_816_1969"} >= {"1", "2.1"}
+
+
+def test_no_reference_to_a_corpus_repository_remains():
+    """The corpus is the user's own: nothing in the hub points at a corpus repository to clone or link."""
+    root = pathlib.Path(__file__).resolve().parent.parent
+    bad = ("github.com/Steltic/engineering_rag_india", "Steltic/engineering_rag_india", "private engineering_rag_india",
+           "engineering_rag_india repo", "corpus repo", "private corpus")
+    hits = []
+    for p in [root / "README.md", root / "CHANGES_2026-09-review.md", *(root / "steltic_hub").rglob("*")]:
+        if not p.is_file() or "__pycache__" in p.parts or p.suffix not in (".md", ".py", ".js", ".json", ".html"):
+            continue
+        t = p.read_text(encoding="utf-8", errors="ignore")
+        hits += [f"{p.relative_to(root)}: {b}" for b in bad if b in t]
+    assert not hits, hits

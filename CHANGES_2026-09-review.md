@@ -1,3 +1,30 @@
+# IS corpus: built from your own licensed PDFs, nothing to clone (2026-09-27)
+
+The IS corpus is no longer cloned from a separate repository: BIS standards are licensed and are not
+redistributed. The hub ships the corpus tooling. Each user builds the corpus from PDFs they licensed.
+
+- **The module is bundled.**
+  - The module id `engineering_rag_india` is kept, so `server.requires` and
+    `{server.engineering_rag_india}` in HR, CFS and NL are unchanged.
+  - It is named "IS corpus (your own conversions)".
+  - `source.bundled`: no url, no clone, no private flag.
+- **The tooling is bundled** in `catalog/engineering_rag_india/scripts/` without licensed data:
+  - no transcriptions, section tables, figure data or per-stem notes;
+  - such data files are optional, and the corpus-fix step supplies them.
+- **An empty corpus on install.**
+  - `post_install` lays out an empty workspace and builds an empty index.
+  - The grounding server answers "not in the corpus" on it.
+  - An update refreshes `scripts/*.py` only; corpus data and `scripts/*.json` stay.
+- **The workflow** (README *Building the IS corpus*):
+  1. the first pass in the hub (Admin → Standards or Convert, Rebuild index, Validate corpus);
+  2. the corpus fix by a frontier LLM agent, with `CORPUS_FIX_LLM_INSTRUCTIONS.md` (new, at the root);
+  3. **Import fixed corpus**, a new tab: it checks, backs up, replaces, rebuilds and validates.
+- **Rebuild index**:
+  - skips the per-document PDF repair when the PDF is not found;
+  - has a *Skip the per-document repair* checkbox.
+- **Validate corpus** probes only the stems you converted, with id lookups and short key phrases.
+- **Admin → Standards**: the text now describes the first pass. Its default folder is `grokbot/pdfs`.
+
 # steltic-hub-india 0.2.2: USA sync (2026-09-27)
 
 Branch `fix/2026-09-review`, based on the delivered zip (India 0.1.0, which was already at USA 9997de4 in substance).
