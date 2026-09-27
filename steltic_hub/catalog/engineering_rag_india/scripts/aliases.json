@@ -1,0 +1,490 @@
+{
+  "synonym_groups": [
+    [
+      "k1",
+      "k 1",
+      "k_1",
+      "probability factor",
+      "risk coefficient"
+    ],
+    [
+      "k2",
+      "k 2",
+      "k_2",
+      "terrain roughness and height factor",
+      "terrain and height factor"
+    ],
+    [
+      "k3",
+      "k 3",
+      "k_3",
+      "topography factor"
+    ],
+    [
+      "k4",
+      "k 4",
+      "k_4",
+      "importance factor for cyclonic region",
+      "cyclonic importance factor"
+    ],
+    [
+      "Kd",
+      "K d",
+      "K_d",
+      "wind directionality factor"
+    ],
+    [
+      "Ka",
+      "K a",
+      "K_a",
+      "area averaging factor"
+    ],
+    [
+      "Kc",
+      "K c",
+      "K_c",
+      "combination factor"
+    ],
+    [
+      "Vb",
+      "V b",
+      "V_b",
+      "basic wind speed"
+    ],
+    [
+      "Vz",
+      "V z",
+      "V_z",
+      "design wind velocity",
+      "design wind speed"
+    ],
+    [
+      "pz",
+      "p z",
+      "p_z",
+      "wind pressure"
+    ],
+    [
+      "pd",
+      "p d",
+      "p_d",
+      "design wind pressure"
+    ],
+    [
+      "Cpe",
+      "C pe",
+      "C_pe",
+      "external pressure coefficient"
+    ],
+    [
+      "Cpi",
+      "C pi",
+      "C_pi",
+      "internal pressure coefficient"
+    ],
+    [
+      "Cf",
+      "C f",
+      "C_f",
+      "force coefficient"
+    ],
+    [
+      "gust factor",
+      "G",
+      "gust effectiveness"
+    ],
+    [
+      "terrain category",
+      "terrain categories"
+    ],
+    [
+      "zone factor",
+      "Z",
+      "seismic zone factor"
+    ],
+    [
+      "importance factor",
+      "I",
+      "importance factor (I)"
+    ],
+    [
+      "response reduction factor",
+      "R",
+      "response reduction factor (R)"
+    ],
+    [
+      "design horizontal acceleration coefficient",
+      "Ah",
+      "A h",
+      "A_h"
+    ],
+    [
+      "design acceleration coefficient",
+      "Sa/g",
+      "S a /g",
+      "spectral acceleration coefficient"
+    ],
+    [
+      "fundamental natural period",
+      "Ta",
+      "T a",
+      "approximate fundamental period",
+      "natural period"
+    ],
+    [
+      "design seismic base shear",
+      "VB",
+      "V B",
+      "base shear"
+    ],
+    [
+      "seismic weight",
+      "W"
+    ],
+    [
+      "storey drift",
+      "story drift",
+      "drift",
+      "inter-storey drift"
+    ],
+    [
+      "minimum design earthquake horizontal lateral force",
+      "rho",
+      "ρ"
+    ],
+    [
+      "ordinary moment resisting frame",
+      "OMRF",
+      "ordinary moment frame",
+      "OMF"
+    ],
+    [
+      "special moment resisting frame",
+      "SMRF",
+      "special moment frame",
+      "SMF"
+    ],
+    [
+      "ordinary braced frame",
+      "OBF",
+      "ordinary concentrically braced frame",
+      "OCBF"
+    ],
+    [
+      "special braced frame",
+      "SBF",
+      "special concentrically braced frame",
+      "SCBF"
+    ],
+    [
+      "eccentrically braced frame",
+      "EBF"
+    ],
+    [
+      "shear link",
+      "link",
+      "links"
+    ],
+    [
+      "overstrength factor",
+      "Ω",
+      "overstrength"
+    ],
+    [
+      "soft storey",
+      "soft story"
+    ],
+    [
+      "torsional irregularity",
+      "torsion irregularity"
+    ],
+    [
+      "partial safety factor for material",
+      "partial safety factors for materials",
+      "γm",
+      "γ m"
+    ],
+    [
+      "partial safety factor for loads",
+      "partial safety factors for loads",
+      "load factor",
+      "γf",
+      "γ f"
+    ],
+    [
+      "γm0",
+      "γ m0",
+      "gamma_m0"
+    ],
+    [
+      "γm1",
+      "γ m1",
+      "gamma_m1"
+    ],
+    [
+      "design compressive stress",
+      "fcd",
+      "f cd"
+    ],
+    [
+      "stress reduction factor",
+      "χ",
+      "chi"
+    ],
+    [
+      "lateral torsional buckling",
+      "LTB",
+      "lateral-torsional buckling",
+      "χLT",
+      "chi_LT"
+    ],
+    [
+      "imperfection factor",
+      "α",
+      "alpha"
+    ],
+    [
+      "effective length",
+      "KL",
+      "effective length factor"
+    ],
+    [
+      "slenderness ratio",
+      "KL/r",
+      "λ"
+    ],
+    [
+      "yield stress",
+      "fy",
+      "f y"
+    ],
+    [
+      "ultimate tensile stress",
+      "fu",
+      "f u"
+    ],
+    [
+      "E250",
+      "E 250",
+      "Fe 410",
+      "Fe410"
+    ],
+    [
+      "E350",
+      "E 350",
+      "Fe 490"
+    ],
+    [
+      "plastic section modulus",
+      "Zp",
+      "Z p"
+    ],
+    [
+      "elastic section modulus",
+      "Ze",
+      "Z e"
+    ],
+    [
+      "ISMB",
+      "MB",
+      "medium weight beam"
+    ],
+    [
+      "ISHB",
+      "HB",
+      "heavy weight beam"
+    ],
+    [
+      "ISMC",
+      "MC",
+      "medium channel"
+    ],
+    [
+      "ISA",
+      "angle",
+      "equal angle"
+    ],
+    [
+      "deflection limit",
+      "deflection limits",
+      "span/"
+    ],
+    [
+      "strong column weak beam",
+      "column to beam strength ratio",
+      "SCWB"
+    ],
+    [
+      "panel zone",
+      "joint panel zone"
+    ],
+    [
+      "demand critical weld",
+      "demand critical welds"
+    ],
+    [
+      "protected zone",
+      "protected zones"
+    ],
+    [
+      "effective design width",
+      "effective width"
+    ],
+    [
+      "basic design stress",
+      "basic allowable design stress"
+    ],
+    [
+      "flat-width ratio",
+      "flat width ratio",
+      "w/t"
+    ],
+    [
+      "cold formed",
+      "cold-formed",
+      "light gauge"
+    ],
+    [
+      "lipped channel",
+      "channel with lips"
+    ],
+    [
+      "zed section",
+      "Z section",
+      "lipped zed"
+    ],
+    [
+      "imposed load",
+      "live load",
+      "IL",
+      "LL"
+    ],
+    [
+      "warehouse",
+      "warehouses",
+      "storage",
+      "godown"
+    ],
+    [
+      "office",
+      "offices"
+    ],
+    [
+      "partition",
+      "partitions"
+    ],
+    [
+      "load combination",
+      "load combinations"
+    ],
+    [
+      "Bengaluru",
+      "Bangalore"
+    ],
+    [
+      "Visakhapatnam",
+      "Vishakhapatnam",
+      "Vishakapatnam",
+      "Vizag",
+      "Visakapatnam"
+    ],
+    [
+      "Kochi",
+      "Cochin"
+    ],
+    [
+      "Gurugram",
+      "Gurgaon"
+    ],
+    [
+      "Pune",
+      "Poona"
+    ],
+    [
+      "Mumbai",
+      "Bombay"
+    ],
+    [
+      "Chennai",
+      "Madras"
+    ],
+    [
+      "Kolkata",
+      "Calcutta"
+    ],
+    [
+      "Thiruvananthapuram",
+      "Trivandrum"
+    ],
+    [
+      "Mysuru",
+      "Mysore"
+    ],
+    [
+      "Vadodara",
+      "Baroda"
+    ],
+    [
+      "Kozhikode",
+      "Calicut"
+    ],
+    [
+      "Puducherry",
+      "Pondicherry"
+    ],
+    [
+      "Prayagraj",
+      "Allahabad"
+    ],
+    [
+      "Varanasi",
+      "Banaras",
+      "Benaras"
+    ],
+    [
+      "Odisha",
+      "Orissa"
+    ],
+    [
+      "Mangaluru",
+      "Mangalore"
+    ],
+    [
+      "Belagavi",
+      "Belgaum"
+    ],
+    [
+      "Kanpur",
+      "Cawnpore"
+    ],
+    [
+      "Delhi",
+      "New Delhi"
+    ]
+  ],
+  "eq_id_aliases": {},
+  "id_aliases": {},
+  "conflicts": [
+    {
+      "trigger": [
+        "response reduction factor",
+        "R factor",
+        "R value",
+        "R for",
+        "Table 9",
+        "Table 23"
+      ],
+      "prefer": {
+        "doc": "IS_1893_Part_1_2016",
+        "table_id": "9",
+        "section_id": "7.2.6"
+      },
+      "flag": {
+        "doc": "IS_800_2007",
+        "table_id": "23",
+        "note": "IS 800 Table 23 R values differ from IS 1893 (Part 1):2016 Table 9; superseded_by: IS 1893:2016 Table 9 (verify precedence)"
+      }
+    }
+  ],
+  "notes": "India alias layer (IS symbols with spacing variants, city spellings, zone factor<->Z, response reduction factor<->R). US ASCE/AISC groups removed; see us_terms_not_in_IS.json. No eq-id aliases."
+}
