@@ -574,6 +574,59 @@
       "artifacts": []
     },
     {
+      "id": "import",
+      "title": "Import fixed corpus",
+      "kind": "form",
+      "blurb": "Step 3 of the workflow: put the fixed corpus zip returned by the corpus-fix step (CORPUS_FIX_LLM_INSTRUCTIONS.md) in place of this PC's corpus. The zip is checked first (documents/standards/<STEM>/ at the top or under one folder; unsafe paths refused), the grounding server is stopped, the current documents/, indexes/, search/, cache/ and scripts/*.json go to <data>/grokbot_backups/<time>/ (move them back to undo), and the zip's are moved in. The hub's code is never replaced: scripts/*.py in the zip are kept aside in the backup for review, scripts/*.json (quality.json and the other corpus data) are applied, PDFs are ignored. Then Rebuild index (no repair) and Validate corpus run, and the server starts again.",
+      "run": {
+        "kind": "cli",
+        "cwd": "{data_dir}/grokbot",
+        "label": "Import",
+        "command": [
+          "{data_dir}/grokbot/scripts/import_corpus_zip.py",
+          "{f.zip}",
+          "--root",
+          "{data_dir}/grokbot",
+          "--hub-url",
+          "{hub_url}",
+          "--module",
+          "engineering_rag_india"
+        ]
+      },
+      "fields": [
+        {
+          "id": "job",
+          "type": "project",
+          "label": "Project"
+        },
+        {
+          "id": "zip",
+          "type": "file",
+          "label": "Fixed corpus zip",
+          "accept": ".zip",
+          "required": true,
+          "help": "The zip the LLM agent returned. Nothing is uploaded anywhere — it is unpacked on this machine."
+        },
+        {
+          "id": "rebuild",
+          "type": "checkbox",
+          "label": "Rebuild index (no repair) and Validate corpus afterwards",
+          "arg": "--rebuild",
+          "arg_style": "flag-if-true",
+          "default": true
+        },
+        {
+          "id": "dry_run",
+          "type": "checkbox",
+          "label": "Check the zip only (change nothing)",
+          "arg": "--dry-run",
+          "arg_style": "flag-if-true",
+          "default": false
+        }
+      ],
+      "artifacts": []
+    },
+    {
       "id": "plan",
       "title": "Retrieval plan",
       "kind": "form",

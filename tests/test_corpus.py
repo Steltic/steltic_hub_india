@@ -1,11 +1,11 @@
 """The IS corpus module: bundled tooling, an empty corpus the user builds from their own licensed PDFs,
-and the grounding server on an empty corpus.
+the grounding server on an empty corpus, and Import fixed corpus.
 
 No module install and no BIS text: every document here is synthetic.
 
     python -m pytest tests/test_corpus.py -q
 """
-import json, os, pathlib, socket, subprocess, sys, tempfile, time, urllib.request
+import json, os, pathlib, socket, subprocess, sys, tempfile, time, urllib.request, zipfile
 
 import pytest
 
@@ -74,7 +74,11 @@ def test_corpus_module_is_bundled_and_names_no_corpus_repository():
     assert "github.com/Steltic/engineering_rag_india" not in raw and '"private"' not in raw and '"url"' not in raw
     assert "CORPUS_FIX_LLM_INSTRUCTIONS.md" in raw                      # the workflow is named in the module help
     tabs = {t.id: t for t in m.tabs}
-    assert {"corpus", "convert", "index", "validate", "grounding"} <= set(tabs)
+    assert {"corpus", "convert", "index", "validate", "import", "grounding"} <= set(tabs)
+    imp = tabs["import"]
+    assert "import_corpus_zip.py" in imp.run.command[0] and "{hub_url}" in imp.run.command
+    zipf = next(f for f in imp.fields if f.id == "zip")
+    assert zipf.type == "file" and zipf.accept == ".zip" and zipf.required
     assert any(f.id == "no_repair" and f.arg == "--no-repair" for f in tabs["index"].fields)
 
 
@@ -82,7 +86,7 @@ def test_bundled_tooling_carries_no_licensed_data():
     """The corpus tooling is code: no transcriptions, section tables, figure data or per-stem notes."""
     names = {p.name for p in SCRIPTS.iterdir()}
     for must in ("retrieval.py", "build_index.py", "search.py", "convert_pdf.py", "postprocess.py", "validate.py",
-                 "strip_watermark.py", "update_metadata.py", "query_cache.py", "bis_text.py"):
+                 "strip_watermark.py", "update_metadata.py", "query_cache.py", "bis_text.py", "import_corpus_zip.py"):
         assert must in names, must
     for banned in ("bis_manual_sections.json", "is811_manual.json", "quality.json", "is808_fixes.json",
                    "recover_image_pages.py"):
@@ -183,6 +187,79 @@ def test_grounding_server_starts_on_an_empty_corpus(tmp_path, built):
     finally:
         proc.terminate()
         proc.wait(timeout=10)
+
+
+# ---------------------------------------------------------------- Import fixed corpus
+def _fixed_zip(tmp: pathlib.Path) -> pathlib.Path:
+    """What the corpus-fix step returns: a corpus folder (here under grokbot/), data files in scripts/,
+    and things that must not be applied (a .py, a PDF)."""
+    src = tmp / "fixed" / "grokbot"
+    _synthetic_doc(src)
+    (src / "scripts").mkdir(parents=True)
+    (src / "scripts" / "quality.json").write_text('{"IS_816_1969": {"quality": "REPAIRED", "known_defects": []}}',
+                                                  encoding="utf-8")
+    (src / "scripts" / "retrieval.py").write_text("raise SystemExit('the zip code must never run')\n", encoding="utf-8")
+    zp = tmp / "fixed_corpus.zip"
+    with zipfile.ZipFile(zp, "w") as zf:
+        for p in src.rglob("*"):
+            if p.is_file():
+                zf.write(p, "grokbot/" + p.relative_to(src).as_posix())
+        zf.writestr("my_pdfs/IS_816_1969.pdf", b"%PDF-1.4 not really")
+        zf.writestr("CORPUS_FIX_LLM_INSTRUCTIONS.md", "instructions")
+    return zp
+
+
+def test_import_fixed_corpus_zip_backs_up_replaces_and_rebuilds(tmp_path):
+    data = tmp_path / "d"
+    assert _post_install(data).returncode == 0
+    root = data / "grokbot"
+    (root / "documents" / "standards" / "OLD_MARKER").mkdir()
+    zp = _fixed_zip(tmp_path)
+
+    dry = _run("import_corpus_zip.py", zp, "--root", root, "--dry-run", root=root)
+    assert dry.returncode == 0 and "IS_816_1969" in dry.stdout and "nothing changed" in dry.stdout
+    assert (root / "documents" / "standards" / "OLD_MARKER").is_dir()
+
+    r = _run("import_corpus_zip.py", zp, "--root", root, "--rebuild", root=root)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "CORPUS: PASS" in r.stdout
+    std = root / "documents" / "standards"
+    assert (std / "IS_816_1969").is_dir() and not (std / "OLD_MARKER").exists()
+    # the hub's code stays; the zip's data file is applied; the PDF is not copied
+    assert (root / "scripts" / "retrieval.py").read_bytes() == (SCRIPTS / "retrieval.py").read_bytes()
+    assert "REPAIRED" in (root / "scripts" / "quality.json").read_text(encoding="utf-8")
+    assert not list(root.rglob("*.pdf"))
+    backups = list((data / "grokbot_backups").iterdir())
+    assert len(backups) == 1
+    b = backups[0]
+    assert (b / "documents" / "standards" / "OLD_MARKER").is_dir()
+    assert (b / "zip_scripts_not_applied" / "retrieval.py").is_file()
+    assert json.loads((b / "IMPORT.json").read_text())["documents"] == ["IS_816_1969"]
+    # the imported corpus answers
+    s = _run("search.py", "exact_section", "2.1", "--doc", "IS_816_1969", "--root", root, root=root)
+    hit = json.loads(s.stdout)
+    assert hit["found"] and "quokka fasteners" in hit["hits"][0]["text"]
+    docs = json.loads((root / "indexes" / "documents.json").read_text(encoding="utf-8"))
+    assert [d["id"] for d in docs] == ["IS_816_1969"]
+
+
+def test_import_refuses_a_zip_that_is_not_a_safe_corpus(tmp_path):
+    data = tmp_path / "d"
+    assert _post_install(data).returncode == 0
+    root = data / "grokbot"
+    (root / "documents" / "standards" / "KEEP").mkdir()
+    bad = tmp_path / "bad.zip"
+    with zipfile.ZipFile(bad, "w") as zf:
+        zf.writestr("documents/standards/IS_800_2007/markdown/x.md", "x")
+        zf.writestr("../escape.txt", "x")
+    none = tmp_path / "none.zip"
+    with zipfile.ZipFile(none, "w") as zf:
+        zf.writestr("readme.txt", "no corpus here")
+    for zp, why in ((bad, "unsafe path"), (none, "no documents/standards")):
+        r = _run("import_corpus_zip.py", zp, "--root", root, root=root)
+        assert r.returncode == 2 and why in r.stdout, r.stdout
+    assert (root / "documents" / "standards" / "KEEP").is_dir()
+    assert not (data / "grokbot_backups").exists() and not (tmp_path / "escape.txt").exists()
 
 
 def test_rebuild_skips_the_pdf_repair_when_the_pdf_is_not_found(tmp_path):
