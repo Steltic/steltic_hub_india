@@ -12,8 +12,9 @@ corpus as a zip. This script puts that zip in place of the workspace corpus:
    it needs documents/standards/<STEM>/; absolute paths, `..`, links and oversized archives are refused.
 2. Unpacks it into a staging folder beside the workspace.
 3. Asks the hub to stop the IS corpus grounding server (--hub-url; it holds the index open), then
-   moves the current documents/, indexes/, search/, cache/, INDIA_MANIFEST.json and the data files of
-   scripts/ (*.json) into <workspace>_backups/<timestamp>/, and the staged ones into their place.
+   moves the current documents/, indexes/, search/, cache/, INDIA_MANIFEST.json, FIX_REPORT.md and the
+   data files of scripts/ (*.json) into <workspace>_backups/<timestamp>/, and the staged ones into their
+   place (the layout is the one CORPUS_FIX_LLM_INSTRUCTIONS.md section 1.2 asks the agent for).
    If a move fails (a file still open), everything moved so far is put back and nothing changes.
 4. The workspace code is never replaced: scripts/*.py from the zip are NOT applied (the hub's own
    copies stay; the zip's are kept in the backup folder under zip_scripts_not_applied/ for review).
@@ -40,7 +41,7 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 DATA_DIRS = ("documents", "indexes", "search")   # replaced from the zip
-DATA_FILES = ("INDIA_MANIFEST.json",)
+DATA_FILES = ("INDIA_MANIFEST.json", "FIX_REPORT.md")   # FIX_REPORT.md: what the corpus-fix step did
 MAX_UNCOMPRESSED = 20 * 1024 ** 3                  # 20 GB: a real corpus is well under 1 GB
 
 

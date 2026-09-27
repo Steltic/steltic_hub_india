@@ -206,6 +206,7 @@ def _fixed_zip(tmp: pathlib.Path) -> pathlib.Path:
                 zf.write(p, "grokbot/" + p.relative_to(src).as_posix())
         zf.writestr("my_pdfs/IS_816_1969.pdf", b"%PDF-1.4 not really")
         zf.writestr("CORPUS_FIX_LLM_INSTRUCTIONS.md", "instructions")
+        zf.writestr("grokbot/FIX_REPORT.md", "# Fix report\nsynthetic")
     return zp
 
 
@@ -228,6 +229,7 @@ def test_import_fixed_corpus_zip_backs_up_replaces_and_rebuilds(tmp_path):
     # the hub's code stays; the zip's data file is applied; the PDF is not copied
     assert (root / "scripts" / "retrieval.py").read_bytes() == (SCRIPTS / "retrieval.py").read_bytes()
     assert "REPAIRED" in (root / "scripts" / "quality.json").read_text(encoding="utf-8")
+    assert "Fix report" in (root / "FIX_REPORT.md").read_text(encoding="utf-8")     # what the fix step did, kept
     assert not list(root.rglob("*.pdf"))
     backups = list((data / "grokbot_backups").iterdir())
     assert len(backups) == 1

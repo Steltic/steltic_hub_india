@@ -249,8 +249,9 @@ def corpus_main(argv: list[str]) -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"passed": ok, "probes": rows}, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     n = {s: sum(1 for r in rows if r["status"] == s) for s in ("PASS", "FAIL", "SKIP", "WARN")}
-    print(f"\nCORPUS: {'PASS' if ok else 'FAIL'}  (pass {n['PASS']}, fail {n['FAIL']}, skipped {n['SKIP']}, "
-          f"corpus-fix advisories {n['WARN']})  report={out}")
+    ran = n["PASS"] + n["FAIL"] + n["WARN"]
+    print(f"\nCORPUS: {'PASS' if ok else 'FAIL'} ({n['PASS']}/{ran} probes; skipped {n['SKIP']} for stems not "
+          f"converted; corpus-fix advisories {n['WARN']})  report={out}")
     if not ok:
         print("A first-pass conversion usually fails some probes. Next: the corpus-fix step "
               "(CORPUS_FIX_LLM_INSTRUCTIONS.md), then Import fixed corpus, Rebuild index, Validate.")
