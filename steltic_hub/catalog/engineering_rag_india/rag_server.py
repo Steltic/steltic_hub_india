@@ -301,7 +301,7 @@ class Bridge:
         collection = str(body.get("collection") or body.get("doc") or "")
         clause = str(body.get("clause") or "").strip()
         chapter = str(body.get("chapter") or "").strip()
-        # the retrieval policy's fields (skills/Skill_querying_PACKAGED.md): an exact type with the id
+        # the retrieval policy's fields (QUERYING_IS_CORPUS.md in the HR / CFS / nonlinear repositories): an exact type with the id
         # alone in `query`, provisions unless commentary is asked for, and how much context around it
         qtype = str(body.get("type") or "").strip().lower()
         if qtype in ("exact_section", "exact_equation", "exact_table", "id") and q and not clause:

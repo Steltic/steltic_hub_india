@@ -290,6 +290,41 @@ def test_rebuild_skips_the_pdf_repair_when_the_pdf_is_not_found(tmp_path):
     assert {s["section_id"] for s in secs if s["doc"] == "IS_816_1969"} >= {"1", "2.1"}
 
 
+def test_exact_table_answers_only_the_table_asked_for(tmp_path):
+    """An exact table lookup returns that table or nothing: IS 800 prints Table 9 only as 9(a)-(d), and the other
+    tables that merely MENTION a 9 (or a 6) must not come back labelled exact_table; a caption record whose id is the
+    one asked for wins over caption-verified section rows (IS 811 Table 6)."""
+    data = tmp_path / "d"
+    assert _post_install(data).returncode == 0
+    root = data / "grokbot"
+    _synthetic_doc(root)
+    def tab(tid, title, excerpt, **kw):
+        return dict({"doc": "IS_816_1969", "table_id": tid, "title": title, "section": "7.1", "part": "standard",
+                     "pdf_page": 2, "printed_label": "2", "markdown_excerpt": excerpt, "collection": "specification",
+                     "corpus": "specification", "num_rows": 3}, **kw)
+    tables = [tab("9(a)", "Table 9(a) Zebra stress class a", "| 1 | 2 |"),
+              tab("9(b)", "Table 9(b) Zebra stress class b", "| 1 | 2 |"),
+              tab("39", "Table 39 Quokka lengths", "see Table 9 and Table 6 for the zebra values"),
+              tab("6", "Table 6 Quokka channels", "| a | b |"),
+              tab("20x6", "20 x 6 section properties (IS 816 Table 6)", "| 6 | 6 |", structured_row=True,
+                  caption_verified=True, label="QK20X6")]
+    (root / "documents" / "standards" / "IS_816_1969" / "indexes" / "tables.json").write_text(json.dumps(tables),
+                                                                                              encoding="utf-8")
+    assert _run("build_index.py", "--root", root, "--no-repair", root=root).returncode == 0
+
+    def ask(tid):
+        r = _run("search.py", "exact_table", tid, "--doc", "IS_816_1969", "--root", root, root=root)
+        return json.loads(r.stdout)
+    got = ask("Table 9")
+    assert got["found"] and sorted(h.get("table_id") for h in got["hits"]) == ["9(a)", "9(b)"], got
+    got = ask("Table 20")
+    assert not got["found"], got
+    got = ask("Table 6")
+    assert got["found"] and [h.get("table_id") for h in got["hits"]] == ["6"], got
+    got = ask("QK20X6")
+    assert got["found"] and got["hits"][0].get("table_id") == "20x6", got
+
+
 def _env_without_poppler(tmp_path: pathlib.Path) -> dict:
     """This PC as a Windows machine without Poppler: no pdftotext on PATH or in the usual install places."""
     empty = tmp_path / "no_poppler"

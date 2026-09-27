@@ -1169,6 +1169,13 @@ class Corpus:
                 recs_null.append(t)
         # never rank table_id=null TOC/nomenclature above a real table_id
         recs = recs_real or recs_null
+        # The table whose own id IS the one asked for wins before any other preference: the
+        # caption-verified filter below would otherwise drop IS 811 "Table 6" (a caption record) in
+        # favour of the structured section rows that merely mention a 6.
+        own = [t for t in recs if (t.get("table_id") or "").replace(" ", "").lower() == qlow
+               or (t.get("label") or "").replace(" ", "").lower() == qlow]
+        if own:
+            recs = own
         live = [t for t in recs if not t.get("superseded")]
         if live:
             recs = live
@@ -1199,6 +1206,23 @@ class Corpus:
         ]
         if exact_id:
             recs = exact_id
+        elif re.fullmatch(r"\d+[A-Za-z]?", tid_cmp):
+            # A bare BIS table number with no table of that id (IS 800 prints Table 9 and Table 13 only as
+            # 9(a)-(c) / 13(a)-(b)): the loose matches above are other tables that merely MENTION "9" and
+            # must never come back as the exact answer. Its sub-tables are the answer; else nothing is.
+            subs = [t for t in recs if re.fullmatch(re.escape(qlow) + r"\([a-z]\)",
+                                                   (t.get("table_id") or "").replace(" ", "").lower())]
+            if not subs:
+                return {
+                    "found": False,
+                    **self._miss(
+                        query,
+                        "exact_table",
+                        suggestions=self._suggest_ids(tid, "table"),
+                        aliases=self._alias_suggestions(query),
+                    ),
+                }
+            recs = subs
         # stitch same table_id+doc into one hit preferring real grids
         recs.sort(
             key=lambda r: (
