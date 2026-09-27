@@ -52,7 +52,7 @@ Branch `fix/2026-09-review`, based on the delivered zip (India 0.1.0, which was 
 - USA-SYNC 9e0f596: Collect-before-Run gate on hinge_params_collected.json, adapted for India: IS values, IS corpus
 - Tests (Windows): simulate a native crash with ExitProcess(NTSTATUS); clear developer RAG/LLM env in the event-line test
 - IS corpus module: bundle the corpus tooling, without the licensed data
-- IS corpus module ships with the hub: an empty corpus you build yourself (nothing to download or clone)
+- IS corpus module ships with the hub: an empty corpus you build yourself, nothing to download
 - IS corpus: Import fixed corpus tab (scripts/import_corpus_zip.py)
 - Admin: the standards queue is the corpus's first pass, the corpus is built from your own PDFs
 - Add CORPUS_FIX_LLM_INSTRUCTIONS.md; align validate and import with it
