@@ -814,7 +814,10 @@ def test_native_crash_exit_codes_are_explained():
 # A process that dies the way a native library does. Windows hands back the raw NTSTATUS; a POSIX
 # exit status is one byte and cannot carry 3221225477, so there the same event is a real SIGSEGV.
 # exitcodes.explain recognises both, which is all `"on": "native_crash"` asks of a code.
-_CRASH = "sys.exit(3221225477)" if sys.platform == "win32" else "os.kill(os.getpid(), signal.SIGSEGV)"
+# On Windows sys.exit(3221225477) overflows the 32-bit C long and the process ends with 4294967295 (-1), which is
+# not a native-crash code; ExitProcess takes the UINT NTSTATUS unchanged, as a real access violation would.
+_CRASH = ("import ctypes; ctypes.windll.kernel32.ExitProcess(3221225477)" if sys.platform == "win32"
+          else "os.kill(os.getpid(), signal.SIGSEGV)")
 
 
 def _crash_script(tmp_path, name, body) -> pathlib.Path:
@@ -1123,6 +1126,8 @@ def test_cli_event_lines_are_relayed_as_events_and_the_rest_stays_log(monkeypatc
                       "print(json.dumps({'not': 'an event'}))\n"
                       "print('KEY=' + os.environ.get('STELTIC_LLM_API_KEY', '(unset)') + ' MODEL=' + os.environ.get('STELTIC_LLM_MODEL', '(unset)'))\n"
                       "print('RAG=' + os.environ.get('RAG_API_URL', '(unset)'))\n", encoding="utf-8")
+    for k in ("RAG_API_URL", "STELTIC_LLM_API_KEY", "STELTIC_LLM_MODEL"):   # a developer machine may export these
+        monkeypatch.delenv(k, raising=False)
     m = _retry_module(script, llm=True, env={"RAG_API_URL": "{server.engineering_rag_india}/query"})
     raw = _drive_run(monkeypatch, tmp_path, m)
     assert [e["type"] for e in _events(raw)][:6] == ["start", "log", "reasoning", "token", "tool", "log"]
@@ -1143,6 +1148,8 @@ def test_a_cli_run_marked_llm_gets_the_connection_and_the_servers_it_names(monke
     script = tmp_path / "env.py"
     script.write_text("import os\nfor k in ('STELTIC_LLM_BASE_URL', 'STELTIC_LLM_API_KEY', 'STELTIC_LLM_MODEL', 'RAG_API_URL'):\n"
                       "    print(k + '=' + os.environ.get(k, '(unset)'))\n", encoding="utf-8")
+    for k in ("RAG_API_URL", "STELTIC_LLM_API_KEY", "STELTIC_LLM_MODEL"):   # a developer machine may export these
+        monkeypatch.delenv(k, raising=False)
     m = _retry_module(script, llm=True, env={"RAG_API_URL": "{server.engineering_rag_india}/query"})
     class Reg:
         def is_installed(self, mid): return True
