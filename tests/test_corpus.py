@@ -32,8 +32,9 @@ def _post_install(data_dir: pathlib.Path) -> subprocess.CompletedProcess:
 
 
 def _run(script: str, *args, root: pathlib.Path, **kw) -> subprocess.CompletedProcess:
+    # the scripts write UTF-8 (IS symbols such as Ω and →), whatever the console code page is -- decode it as such
     return subprocess.run([sys.executable, str(root / "scripts" / script), *map(str, args)], capture_output=True,
-                          text=True, timeout=300, cwd=str(root), **kw)
+                          encoding="utf-8", errors="replace", timeout=300, cwd=str(root), **kw)
 
 
 def _synthetic_doc(root: pathlib.Path, stem: str = "IS_816_1969") -> None:
@@ -133,6 +134,17 @@ def test_validate_on_an_empty_corpus_says_what_to_do(workspace):
     assert "the corpus is empty" in r.stdout and "IS_456_2000 is not in the corpus" in r.stdout
     rep = json.loads((root / "v.json").read_text(encoding="utf-8"))
     assert rep["passed"] is False and any(p["status"] == "SKIP" for p in rep["probes"])
+
+
+def test_scripts_print_on_a_cp1252_console(workspace):
+    """Windows: a piped stdout is cp1252, which has no Ω or →. The scripts write UTF-8 instead of crashing
+    (UnicodeEncodeError) -- the hub also sets PYTHONIOENCODING=utf-8, a plain shell does not."""
+    _, root, _ = workspace
+    env = dict(os.environ, PYTHONIOENCODING="cp1252")
+    env.pop("PYTHONUTF8", None)
+    r = _run("validate.py", "--corpus", "--root", root, root=root, env=env)
+    assert r.returncode == 1 and "UnicodeEncodeError" not in r.stderr, r.stderr[-1500:]
+    assert "the corpus is empty" in r.stdout
 
 
 def _free_port() -> int:
@@ -312,7 +324,7 @@ def test_rebuild_and_import_work_without_poppler_when_the_pdfs_are_present(tmp_p
         assert "Traceback" not in r.stderr
         assert "pdftotext (poppler) not found" in r.stderr
         if not extra:        # the repair would read the PDF text layer: skipped, and said so
-            assert "index repair is skipped" in r.stderr
+            assert "repair skipped for IS_816_1969: pdftotext (poppler) not found" in r.stderr
         else:
             assert "not re-sliced from the PDF text layer" in r.stderr
         secs = json.loads((root / "indexes" / "sections.json").read_text(encoding="utf-8"))
