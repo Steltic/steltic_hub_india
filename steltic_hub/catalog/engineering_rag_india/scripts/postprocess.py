@@ -1707,8 +1707,13 @@ def nearest_section_hint(
 def pdf_text_pages(pdf_path: Path) -> list[str]:
     import subprocess
 
+    from bis_text import poppler_missing_note, poppler_tool
+    exe = poppler_tool("pdftotext")
+    if not exe:
+        poppler_missing_note("pdftotext", "the PDF equation census is skipped")
+        return []
     r = subprocess.run(
-        ["pdftotext", "-layout", str(pdf_path), "-"],
+        [exe, "-layout", str(pdf_path), "-"],
         capture_output=True,
         text=True,
         check=False,
@@ -3883,6 +3888,10 @@ def repair_bis_doc_indexes(doc_dir: Path, *, pdf: Optional[Path] = None, write: 
     old_eqs = _load("equations.json")
     pdf = pdf or locate_source_pdf(doc0, stem)
     layout = list(pdf_layout_pages(str(pdf))) if pdf else []
+    if pdf and not layout:
+        # no PDF text layer on this PC (poppler missing) or an unreadable PDF: a repair from an empty layout would
+        # only drop clause records, so the indexes stay exactly as they are
+        return {"doc": stem, "skipped": "no PDF text layer (pdftotext missing or the PDF gave no text)", "written": False}
     served, labels = served_pages(doc_dir, stem)
     amd_pages = set(doc0.get("amendment_pages") or [])
 

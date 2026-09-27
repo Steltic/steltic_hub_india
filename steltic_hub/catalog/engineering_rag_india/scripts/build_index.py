@@ -384,6 +384,13 @@ def pick_body_occurrence(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def build(root: Path, repair: bool = True) -> dict[str, Any]:
     std_root = root / "documents" / "standards"
     if repair and std_root.is_dir():
+        from bis_text import poppler_missing_note, poppler_tool
+        if poppler_tool("pdftotext") is None:
+            # the repair re-derives the per-document indexes from the PDF text layer; without pdftotext it
+            # could only lose records, so every document keeps the indexes it has
+            poppler_missing_note("pdftotext", "the per-document index repair is skipped")
+            repair = False
+    if repair and std_root.is_dir():
         from postprocess import locate_source_pdf, repair_bis_doc_indexes
         from update_metadata import update_docs
 

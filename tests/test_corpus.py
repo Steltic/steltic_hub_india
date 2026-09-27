@@ -278,6 +278,66 @@ def test_rebuild_skips_the_pdf_repair_when_the_pdf_is_not_found(tmp_path):
     assert {s["section_id"] for s in secs if s["doc"] == "IS_816_1969"} >= {"1", "2.1"}
 
 
+def _env_without_poppler(tmp_path: pathlib.Path) -> dict:
+    """This PC as a Windows machine without Poppler: no pdftotext on PATH or in the usual install places."""
+    empty = tmp_path / "no_poppler"
+    empty.mkdir(exist_ok=True)
+    env = dict(os.environ, PATH=str(empty))
+    for v in ("LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)", "USERPROFILE", "ProgramData"):
+        env[v] = str(empty)
+    env.pop("INDIA_POPPLER_BIN", None)
+    return env
+
+
+def test_rebuild_and_import_work_without_poppler_when_the_pdfs_are_present(tmp_path):
+    """Windows without Poppler, the user's licensed PDFs in <corpus>/pdfs: Rebuild index (with and without the
+    repair) and Import fixed corpus must not crash on the missing pdftotext; they keep the corpus text and the
+    indexes as they are and say why."""
+    data = tmp_path / "d"
+    assert _post_install(data).returncode == 0
+    root = data / "grokbot"
+    _synthetic_doc(root)
+    (root / "pdfs" / "IS_816_1969.pdf").write_bytes(b"%PDF-1.4 synthetic, not a real PDF")
+    # a clause whose heading is not in the served text: the rebuild then asks the PDF text layer for it
+    # (build_index layout_for -> bis_text.pdf_layout_pages -- the call that crashed on Windows)
+    sp = root / "documents" / "standards" / "IS_816_1969" / "indexes" / "sections.json"
+    secs = json.loads(sp.read_text(encoding="utf-8"))
+    secs.append({"doc": "IS_816_1969", "section_id": "2.7", "title": "Heading only in the PDF", "part": "standard",
+                 "pdf_page": 2, "printed_label": "2", "parent": None, "children": [], "synthetic": False, "source": "test"})
+    sp.write_text(json.dumps(secs), encoding="utf-8")
+    env = _env_without_poppler(tmp_path)
+    for extra in ((), ("--no-repair",)):
+        r = _run("build_index.py", "--root", root, *extra, root=root, env=env)
+        assert r.returncode == 0, r.stderr[-2000:]
+        assert "Traceback" not in r.stderr
+        assert "pdftotext (poppler) not found" in r.stderr
+        if not extra:        # the repair would read the PDF text layer: skipped, and said so
+            assert "index repair is skipped" in r.stderr
+        else:
+            assert "not re-sliced from the PDF text layer" in r.stderr
+        secs = json.loads((root / "indexes" / "sections.json").read_text(encoding="utf-8"))
+        assert {x["section_id"] for x in secs if x["doc"] == "IS_816_1969"} >= {"1", "2.1"}
+    s = _run("search.py", "exact_section", "2.1", "--doc", "IS_816_1969", "--root", root, root=root, env=env)
+    assert "quokka fasteners" in json.loads(s.stdout)["hits"][0]["text"]
+    # Import fixed corpus on the same PC
+    r = _run("import_corpus_zip.py", _fixed_zip(tmp_path), "--root", root, "--rebuild", root=root, env=env)
+    assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
+    assert "CORPUS: PASS" in r.stdout and "Rebuild index FAILED" not in r.stdout
+
+
+def test_poppler_tool_is_found_through_INDIA_POPPLER_BIN(tmp_path):
+    exe = tmp_path / "bin" / ("pdftotext.exe" if os.name == "nt" else "pdftotext")
+    exe.parent.mkdir()
+    exe.write_text("")
+    env = dict(_env_without_poppler(tmp_path), INDIA_POPPLER_BIN=str(exe.parent))
+    code = "import sys; sys.path.insert(0, sys.argv[1]); import bis_text; print(bis_text.poppler_tool('pdftotext'))"
+    r = subprocess.run([sys.executable, "-B", "-c", code, str(SCRIPTS)], capture_output=True, text=True, env=env, timeout=60)
+    assert r.returncode == 0 and r.stdout.strip() == str(exe), r.stdout + r.stderr
+    env.pop("INDIA_POPPLER_BIN")
+    r = subprocess.run([sys.executable, "-B", "-c", code, str(SCRIPTS)], capture_output=True, text=True, env=env, timeout=60)
+    assert r.stdout.strip() == "None", r.stdout + r.stderr
+
+
 def test_no_reference_to_a_corpus_repository_remains():
     """The corpus is the user's own: nothing in the hub points at a corpus repository to clone or link."""
     root = pathlib.Path(__file__).resolve().parent.parent

@@ -48,8 +48,9 @@ def find_pdf(name: str, extra: Optional[Path] = None) -> Path:
 
 
 def page_text(pdf: Path, pno: int) -> str:
+    from bis_text import poppler_tool
     out = subprocess.run(
-        ["pdftotext", "-layout", "-f", str(pno), "-l", str(pno), str(pdf), "-"],
+        [poppler_tool("pdftotext") or "pdftotext", "-layout", "-f", str(pno), "-l", str(pno), str(pdf), "-"],
         capture_output=True,
         text=True,
     ).stdout
@@ -57,7 +58,8 @@ def page_text(pdf: Path, pno: int) -> str:
 
 
 def n_pages(pdf: Path) -> int:
-    out = subprocess.run(["pdfinfo", str(pdf)], capture_output=True, text=True).stdout
+    from bis_text import poppler_tool
+    out = subprocess.run([poppler_tool("pdfinfo") or "pdfinfo", str(pdf)], capture_output=True, text=True).stdout
     m = re.search(r"Pages:\s+(\d+)", out)
     return int(m.group(1)) if m else 0
 
@@ -530,6 +532,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--pdf-dir", type=Path, default=None)
     ap.add_argument("--only", default=None)
     a = ap.parse_args(argv)
+    from bis_text import poppler_tool
+    missing = [t for t in ("pdftotext", "pdfinfo") if poppler_tool(t) is None]
+    if missing:
+        # the tables are read from the PDF text layer; without poppler they would come out empty, so the
+        # existing sections.csv files are left untouched
+        raise SystemExit("section tables NOT rebuilt: %s (poppler) not found on this PC -- the existing "
+                         "structured/sections.csv files are unchanged. Install Poppler (Windows: `winget install "
+                         "oschwartz10612.Poppler`, or set INDIA_POPPLER_BIN to its bin folder) and run again." % ", ".join(missing))
     std = a.root / "documents" / "standards"
     report: dict[str, Any] = {}
     jobs = {

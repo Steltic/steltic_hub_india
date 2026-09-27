@@ -76,7 +76,8 @@ WM_RE = re.compile(r"Free Standard provided by BIS|BSB Edge|@[\w.-]+\.\w+", re.I
 
 
 def pdf_text(pdf: Path, pno: int) -> str:
-    out = subprocess.run(["pdftotext", "-layout", "-f", str(pno), "-l", str(pno), str(pdf), "-"],
+    from bis_text import poppler_tool
+    out = subprocess.run([poppler_tool("pdftotext") or "pdftotext", "-layout", "-f", str(pno), "-l", str(pno), str(pdf), "-"],
                          capture_output=True, text=True, errors="replace").stdout
     return "\n".join(ln for ln in out.splitlines() if not WM_RE.search(ln))
 
@@ -86,7 +87,8 @@ def tess_text(pdf: Path, pno: int, cache: Path) -> str:
     f = cache / f"p{pno:02d}.psm6.txt"
     if not f.is_file():
         png = cache / f"p{pno:02d}"
-        subprocess.run(["pdftoppm", "-f", str(pno), "-l", str(pno), "-r", "300", "-gray", "-png", "-singlefile",
+        from bis_text import poppler_tool
+        subprocess.run([poppler_tool("pdftoppm") or "pdftoppm", "-f", str(pno), "-l", str(pno), "-r", "300", "-gray", "-png", "-singlefile",
                         str(pdf), str(png)], check=True)
         subprocess.run(["tesseract", str(png) + ".png", str(f)[:-4], "--psm", "6"], capture_output=True)
         try:
