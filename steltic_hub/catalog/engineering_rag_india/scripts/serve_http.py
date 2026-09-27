@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """HTTP query server for the India corpus -- the API the Steltic engines' standards search tool calls.
 
-    python3 scripts/serve_http.py                    # 127.0.0.1:8765, corpus = this checkout
-    python3 scripts/serve_http.py --port 8765 --host 127.0.0.1 --root /path/to/engineering_rag_india
+    python3 scripts/serve_http.py                    # 127.0.0.1:8765, corpus = the folder above scripts/
+    python3 scripts/serve_http.py --port 8765 --host 127.0.0.1 --root <corpus workspace>
     export RAG_API_URL=http://127.0.0.1:8765/query  # in the engine's environment
 
 stdlib only (http.server.ThreadingHTTPServer). One shared, pre-warmed `retrieval.Corpus`; its SQLite
@@ -217,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--host", default=os.environ.get("RAG_HOST", "127.0.0.1"))
     ap.add_argument("--port", type=int, default=int(os.environ.get("RAG_PORT", "8765")))
     ap.add_argument("--root", default=os.environ.get("INDIA_CORPUS_ROOT") or None,
-                    help="corpus root (default: $INDIA_CORPUS_ROOT, else this checkout)")
+                    help="corpus root (default: $INDIA_CORPUS_ROOT, else the folder above scripts/)")
     ap.add_argument("--log", default=os.environ.get("RAG_QUERY_LOG") or None, help="append one JSON line per query")
     ap.add_argument("--token", default=os.environ.get("RAG_API_TOKEN", ""),
                     help="require 'Authorization: Bearer <token>' on POST /query")
