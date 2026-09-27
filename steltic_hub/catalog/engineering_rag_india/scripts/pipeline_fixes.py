@@ -366,8 +366,13 @@ def pdf_page_text(pdf_path: Path, page: int) -> str:
     import subprocess
     if not pdf_path or not Path(pdf_path).is_file() or not page:
         return ""
+    from bis_text import poppler_missing_note, poppler_tool
+    exe = poppler_tool("pdftotext")
+    if not exe:
+        poppler_missing_note("pdftotext", "equation text is not re-read from the PDF")
+        return ""
     r = subprocess.run(
-        ["pdftotext", "-layout", "-f", str(page), "-l", str(page), str(pdf_path), "-"],
+        [exe, "-layout", "-f", str(page), "-l", str(page), str(pdf_path), "-"],
         capture_output=True,
         text=True,
         check=False,

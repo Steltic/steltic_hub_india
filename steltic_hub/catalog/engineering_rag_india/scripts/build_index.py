@@ -384,6 +384,7 @@ def pick_body_occurrence(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def build(root: Path, repair: bool = True) -> dict[str, Any]:
     std_root = root / "documents" / "standards"
     if repair and std_root.is_dir():
+        from bis_text import poppler_missing_note, poppler_tool
         from postprocess import locate_source_pdf, repair_bis_doc_indexes
         from update_metadata import update_docs
 
@@ -399,6 +400,12 @@ def build(root: Path, repair: bool = True) -> dict[str, Any]:
                 if locate_source_pdf(d0, stem) is None:
                     print(f"repair skipped for {stem}: source PDF not found (recorded path, $INDIA_PDF_DIRS or "
                           f"<corpus>/pdfs/{stem}.pdf); its indexes are used as they are", file=sys.stderr)
+                    continue
+                if poppler_tool("pdftotext") is None:
+                    # the repair reads the PDF text layer; without pdftotext it could only lose records
+                    poppler_missing_note("pdftotext", "the per-document index repair is skipped")
+                    print(f"repair skipped for {stem}: pdftotext (poppler) not found; its indexes are used as they are",
+                          file=sys.stderr)
                     continue
                 repair_bis_doc_indexes(ddir)
     p2_root = root / "engineering_rag_phase2"
@@ -1091,4 +1098,10 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    # Windows: a piped stdout / stderr is cp1252, which cannot print the IS symbols (Ω, →, ≤ ...) -- write UTF-8
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     main()

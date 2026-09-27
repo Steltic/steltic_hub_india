@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
+import sys
 import unicodedata
 from functools import lru_cache
 from pathlib import Path
@@ -41,6 +43,52 @@ def pdf_dirs(root: Optional[Path] = None) -> list[Path]:
         if d not in seen:
             seen.append(d)
     return seen
+
+
+# --------------------------------------------------------------------------
+# poppler (pdftotext / pdfinfo / pdftoppm) -- optional
+# --------------------------------------------------------------------------
+_POPPLER_WARNED: set = set()
+
+
+@lru_cache(maxsize=16)
+def poppler_tool(name: str = "pdftotext") -> Optional[str]:
+    """Path of a poppler command-line tool, or None when this PC has none.
+
+    Looked for in $INDIA_POPPLER_BIN (a folder), then on PATH, then in the usual Windows install places
+    (winget / scoop / chocolatey / a poppler-windows zip unpacked under Program Files or the user's folder).
+    Every caller treats None as "no PDF text layer": steps that re-derive text from the PDF are skipped and
+    the corpus text / indexes are used as they are -- nothing is deleted or degraded because of it.
+    """
+    exe = name + (".exe" if os.name == "nt" else "")
+    env = os.environ.get("INDIA_POPPLER_BIN")
+    if env and (Path(env) / exe).is_file():
+        return str(Path(env) / exe)
+    hit = shutil.which(name)
+    if hit:
+        return hit
+    if os.name == "nt":
+        bases = [os.environ.get(v) for v in ("LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)", "USERPROFILE", "ProgramData")]
+        pats = ["Microsoft/WinGet/Packages/*oppler*/*/Library/bin", "Microsoft/WinGet/Packages/*oppler*/Library/bin",
+                "poppler*/Library/bin", "poppler*/bin", "*/poppler*/Library/bin", "scoop/apps/poppler/current/bin",
+                "scoop/shims", "chocolatey/bin", "chocolatey/lib/poppler*/tools/*/Library/bin"]
+        for b in filter(None, bases):
+            for pat in pats:
+                for d in sorted(Path(b).glob(pat), reverse=True):
+                    if (d / exe).is_file():
+                        return str(d / exe)
+    return None
+
+
+def poppler_missing_note(name: str = "pdftotext", what: str = "") -> None:
+    """One warning per tool per process (stderr), when poppler_tool(name) is None."""
+    if name in _POPPLER_WARNED:
+        return
+    _POPPLER_WARNED.add(name)
+    print(f"[is-corpus] {name} (poppler) not found on this PC -- {what or 'PDF text-layer steps skipped'}; "
+          "the corpus text and indexes are used as they are. Poppler is only needed to convert or repair from the "
+          "PDFs (Windows: `winget install oschwartz10612.Poppler`, or set INDIA_POPPLER_BIN to its bin folder).",
+          file=sys.stderr, flush=True)
 
 
 # --------------------------------------------------------------------------
@@ -90,8 +138,12 @@ def pdf_layout_pages(pdf: str) -> tuple[str, ...]:
     p = Path(pdf)
     if not p.is_file():
         return tuple()
+    exe = poppler_tool("pdftotext")
+    if not exe:
+        poppler_missing_note("pdftotext", "clauses are not re-sliced from the PDF text layer")
+        return tuple()
     out = subprocess.run(
-        ["pdftotext", "-layout", str(p), "-"], capture_output=True, text=True, errors="replace"
+        [exe, "-layout", str(p), "-"], capture_output=True, text=True, errors="replace"
     ).stdout
     pages = out.split("\f")
     if pages and not pages[-1].strip():

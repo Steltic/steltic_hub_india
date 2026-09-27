@@ -59,3 +59,5 @@ Branch `fix/2026-09-review`, based on the delivered zip (India 0.1.0, which was 
 - README, CHANGES: the IS corpus is built from your own licensed PDFs; the recommended workflow
 - IS corpus serve_http.py: the corpus is a workspace, not a checkout
 - CORPUS_FIX_LLM_INSTRUCTIONS.md: final version (matches the hub's bundled corpus module: validate probes, optional scripts/*.json, Import fixed corpus tab)
+- IS corpus: Poppler is optional -- Rebuild index / Import fixed corpus no longer crash on Windows without pdftotext (the text-layer steps are skipped with a note; indexes kept as they are)
+- IS corpus: scripts print UTF-8 on a cp1252 (Windows) pipe; the repair skip for a missing pdftotext is per document, after the source-PDF check (metadata update still runs)

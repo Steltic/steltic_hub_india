@@ -411,6 +411,12 @@ It holds `documents/standards/<STEM>/` (one folder per converted standard), `ind
    **Convert** (with its canonical stem), then **Rebuild index**, then **Validate corpus**.
 3. Each conversion takes hours. A first pass usually fails some Validate probes: OCR on the scanned
    prints, garbled formulas and table grids, image-only figures. Fixing them is step 2.
+4. **Poppler** (`pdftotext`, `pdfinfo`, `pdftoppm`) lets the conversion, the index repair and the section
+   tables read the PDFs' own text layer, which gives a better first pass. Linux: `sudo apt install
+   poppler-utils`. Windows: `winget install oschwartz10612.Poppler` (or unzip a poppler-windows release and
+   set `INDIA_POPPLER_BIN` to its `Library\bin` folder), then restart the hub. Without Poppler every step
+   still runs: the steps that re-read the PDF text layer are skipped with a note, and the corpus text and
+   indexes are kept as they are. **Import fixed corpus (step 3) never needs Poppler.**
 
 ### 2. The corpus fix (a frontier LLM agent)
 
