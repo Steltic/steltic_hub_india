@@ -45,8 +45,17 @@ Branch `fix/2026-09-review`, based on the delivered zip (India 0.1.0, which was 
 
 **Known issue (not fixed):** the Windows launcher installs the US `steltic-hub` package when not run from a checkout.
 
-## Commits (oldest first)
+## Commits (oldest first; subjects only — hashes change when the branch is replayed onto GitHub)
 - USA-SYNC f1b1708: Nonlinear Review tab, adapted for India: IS corpus, no verdict
 - USA-SYNC cf81db7: tab actions, Revise on the NL Run tab, running rail, unix launcher, adapted for India
 - USA-SYNC b97999a: actions declare the fields they pass, no default search cap on Review, adapted for India
 - USA-SYNC 9e0f596: Collect-before-Run gate on hinge_params_collected.json, adapted for India: IS values, IS corpus
+- Tests (Windows): simulate a native crash with ExitProcess(NTSTATUS); clear developer RAG/LLM env in the event-line test
+- IS corpus module: bundle the corpus tooling, without the licensed data
+- IS corpus module ships with the hub: an empty corpus you build yourself, no corpus repo
+- IS corpus: Import fixed corpus tab (scripts/import_corpus_zip.py)
+- Admin: the standards queue is the corpus's first pass, not an exception to a corpus repo
+- Add CORPUS_FIX_LLM_INSTRUCTIONS.md; align validate and import with it
+- README, CHANGES: the IS corpus is built from your own licensed PDFs; the recommended workflow
+- IS corpus serve_http.py: the corpus is a workspace, not a checkout
+- CORPUS_FIX_LLM_INSTRUCTIONS.md: final version (matches the hub's bundled corpus module: validate probes, optional scripts/*.json, Import fixed corpus tab)
