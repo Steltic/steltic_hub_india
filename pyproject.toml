@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "steltic-hub-india"
-version = "0.1.0"
+version = "0.2.2"
 description = "Steltic Hub India: one window over the India (IS 800 / IS 801 / IS 875 / IS 1893) Steltic modules, per-module Python environments, input tabs on top of the viewer bundle"
 readme = "README.md"
 license = "MIT"
