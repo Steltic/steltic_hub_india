@@ -6,13 +6,14 @@ The HR Steel (IS 800) and CFS (IS 801) agents call ONE small HTTP API for spec g
     POST /query   {"query": "...", "collection": "engineering_standards_IS1893",
                    "top_k": 5, "clause": "7.6.4", "stem": "IS_1893_Part_1_2016"}   -> {"results": [...]}
 
-It was written for a hosted vector database. This server answers the same API from the
-engineering_rag_india workspace instead -- the full-text + exact-id index that the corpus repo's
-`scripts/build_index.py` builds over the converted BIS documents. No embeddings, no vector store,
-nothing leaves this PC.
+It was written for a hosted vector database. This server answers the same API from the IS corpus
+workspace instead -- the full-text + exact-id index that the bundled `scripts/build_index.py` builds
+over the BIS documents YOU converted from your own licensed PDFs. No embeddings, no vector store,
+nothing leaves this PC. The hub ships no standard text: a fresh install is an empty corpus, and every
+question is answered "not in the corpus" (an empty `results` list with a note) until you convert.
 
-Collections the agents ask for (the names in steltic_india's `india_collections.py` and the corpus
-README) are mapped onto the corpus document stems:
+Collections the agents ask for (the names in steltic_india's `india_collections.py`) are mapped onto
+the canonical corpus document stems:
 
     engineering_standards_IS800             -> IS_800_2007
     engineering_standards_IS801 / IS811     -> IS_801_1975 / IS_811_1987
@@ -50,7 +51,7 @@ from urllib.parse import urlparse
 
 # ---------------------------------------------------------------- collection mapping
 # engineering_standards_<KEY> -> corpus stem. Mirrors STEM_TO_COLLECTION in steltic_india's
-# india_collections.py and the "Documents and collections" table of the corpus README.
+# india_collections.py and the canonical stems of the Convert tab.
 SPEC = {
     "IS800": "IS_800_2007", "IS_800": "IS_800_2007",
     "IS801": "IS_801_1975", "IS_801": "IS_801_1975",
@@ -281,13 +282,16 @@ class Bridge:
         p2_index = (self.root / "search" / "phase2_fts.sqlite").is_file()
         docs, quality = [], {}
         try:
+            if not spec_index or not (self.root / "indexes" / "documents.json").is_file():
+                raise FileNotFoundError("empty corpus")
             meta = self.corpus().doc_meta
             docs = sorted(str(k) for k in meta)
             quality = {k: (v.get("quality") or "") for k, v in meta.items() if isinstance(v, dict)}
         except Exception:
             pass
         self.release()
-        return {"ok": True, "root": str(self.root), "jurisdiction": "india", "pdfs": pdfs, "converted": converted,
+        return {"ok": True, "root": str(self.root), "jurisdiction": "india", "empty": not docs,
+                "pdfs": pdfs, "converted": converted,
                 "spec_index": spec_index, "phase2_index": p2_index, "indexed_docs": docs, "quality": quality,
                 "queries": len(self.recent), "uptime_s": int(time.time() - self.started)}
 
@@ -361,12 +365,20 @@ class Bridge:
 
     def _spec(self, q: str, doc: str | None, clause: str, chapter: str, top_k: int,
               qtype: str = "", want_commentary: bool = False, neighbors=None):
+        # An empty corpus is the normal state of a fresh install (the hub ships no standard text):
+        # answer "not in the corpus" without touching the retrieval code, which needs built indexes.
+        if not (self.root / "search" / "spec_fts.sqlite").is_file() or \
+                not (self.root / "indexes" / "documents.json").is_file():
+            return [], (f"{doc or 'the IS documents'}: not in the corpus -- the IS corpus on this PC is empty "
+                        f"(convert your licensed BIS PDFs: Admin → Standards, or the IS corpus Convert tab, "
+                        f"then Rebuild index); cite from memory and flag every value to verify"), ""
         c = self.corpus()
         if doc and doc not in c.doc_meta:
-            return [], (f"{doc} is not in the corpus on this PC -- install or update the IS corpus module "
-                        f"(or convert the document on the Convert tab with the canonical stem {doc}) and rebuild the index"), ""
-        if not (self.root / "search" / "spec_fts.sqlite").is_file():
-            return [], "no specification index yet -- install the IS corpus module (its post-install lays the workspace out) or run Rebuild index", ""
+            return [], (f"{doc} is not in the corpus on this PC -- convert your licensed copy on the IS corpus "
+                        f"module's Convert tab with the canonical stem {doc}, then Rebuild index"), ""
+        if not c.doc_meta:
+            return [], ("not in the corpus -- the IS corpus on this PC holds no converted document yet "
+                        "(Admin → Standards, or the IS corpus Convert tab, then Rebuild index)"), ""
         hits: list[dict] = []
         matched = ""                                # which lookup answered: the caller must know
         miss_note = ""                              # the corpus's own reason for an empty answer
@@ -413,7 +425,7 @@ class Bridge:
     def _phase2(self, q: str, group: str, source: str | None, top_k: int):
         c = self.corpus()
         if not (self.root / "search" / "phase2_fts.sqlite").is_file():
-            return [], (f"the {group} collection is not part of the India corpus (engineering_rag_india serves the IS "
+            return [], (f"the {group} collection is not part of the India corpus (the IS corpus serves the IS "
                         f"documents only) -- no hit; use the OpenSees documentation from memory and say so")
         want = max(top_k * 3, 12)
         r = c.search("fts", q, collection=group, neighbors=0, limit=want)
@@ -449,7 +461,7 @@ th{{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:#8b95a3
 .pill.ok{{border-color:#3fc1a0;color:#3fc1a0}} .pill.warn{{border-color:#e0b341;color:#e0b341}}
 </style></head><body>
 <h1>IS corpus — grounding</h1>
-<div class="dim">The design agents' standards-search endpoint (IS 800 / IS 801 / IS 875 / IS 1893 / IS 18168 …), answered from this PC's copy of engineering_rag_india. Workspace: <code>{root}</code></div>
+<div class="dim">The design agents' standards-search endpoint (IS 800 / IS 801 / IS 875 / IS 1893 / IS 18168 …), answered from the corpus you converted on this PC from your own licensed BIS PDFs. Workspace: <code>{root}</code></div>
 <h2>Corpus</h2>
 <p><span class="pill {speccls}">IS documents (spec_fts)</span> <span class="pill {p2cls}">OpenSees docs + worked examples (not part of the India corpus)</span></p>
 <p class="dim">Indexed documents: {converted}</p>
@@ -469,11 +481,12 @@ def render_page(b: Bridge) -> str:
                     f"<td>{html.escape(' / '.join(x for x in (r['clause'], r['chapter']) if x))}</td>"
                     f"<td class='{cls}'>{r['hits']}</td><td>{r['ms']}</td><td class='dim'>{html.escape(r['note'][:120])}</td></tr>")
     hint = ""
-    if not st["spec_index"]:
-        hint = ("<p class='warn'>No IS corpus on this PC yet: install the IS corpus module (git clone of the private "
-                "engineering_rag_india repo with your GitHub credentials, or link a working copy on disk) -- its "
-                "post-install copies the documents, indexes and search scripts here. Until then the agents cite "
-                "the IS documents from memory and flag every value to verify.</p>")
+    if not st["spec_index"] or not st["indexed_docs"]:
+        hint = ("<p class='warn'>The IS corpus on this PC is empty. The hub ships no standard text: convert your own "
+                "licensed BIS PDFs (Admin → Standards, or this module's Convert tab), then Rebuild index and Validate "
+                "corpus; the corpus-fix step (CORPUS_FIX_LLM_INSTRUCTIONS.md) and Import fixed corpus come after. "
+                "Until then every question answers \"not in the corpus\", and the agents cite the IS documents from "
+                "memory and flag every value to verify.</p>")
     docs = ", ".join(f"{d} ({st['quality'][d]})" if st.get("quality", {}).get(d) else d for d in st["indexed_docs"])
     return PAGE.format(root=html.escape(st["root"]),
                        p2cls="ok" if st["phase2_index"] else "warn",
@@ -526,7 +539,7 @@ def make_handler(bridge: Bridge):
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="IS corpus grounding bridge (engineering_rag_india)")
+    ap = argparse.ArgumentParser(description="IS corpus grounding bridge")
     ap.add_argument("--root", required=True, help="corpus workspace (the folder with documents/, indexes/, search/, scripts/)")
     ap.add_argument("--scripts", default=None, help="folder holding retrieval.py (default: <root>/scripts)")
     ap.add_argument("--host", default="127.0.0.1")
@@ -535,7 +548,7 @@ def main(argv=None) -> int:
     root = Path(a.root).resolve()
     scripts = Path(a.scripts).resolve() if a.scripts else root / "scripts"
     if not (scripts / "retrieval.py").is_file():
-        print(f"[is-corpus] retrieval.py not found in {scripts} -- install or update the IS corpus module (its post-install lays the workspace out)")
+        print(f"[is-corpus] retrieval.py not found in {scripts} -- install the IS corpus module (its post-install lays the empty workspace out)")
         return 2
     for d in ("documents/standards", "queue"):
         (root / d).mkdir(parents=True, exist_ok=True)

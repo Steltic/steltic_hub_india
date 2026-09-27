@@ -281,7 +281,7 @@ def test_declared_needs_are_checked_before_a_run():
 
 
 def test_optional_component_is_checked_before_a_run(monkeypatch):
-    """The Query file manager's Convert tab runs Docling, an optional component (a large ML stack). Without it the
+    """The IS corpus module's Convert tab runs Docling, an optional component (a large ML stack). Without it the
     run used to die on `ModuleNotFoundError: docling` inside the script; the hub now refuses up front and names the
     install button."""
     from steltic_hub import envs, main as M
@@ -705,6 +705,7 @@ def test_bridge_answers_empty_not_error_for_unknown_and_unconverted(tmp_path):
     out = br.query({"query": "eigen", "collection": "opensees_documentation"})
     assert out["results"] == [] and "not part of the India corpus" in out["note"]
     (root / "search").mkdir(); (root / "search" / "spec_fts.sqlite").write_bytes(b"")
+    (root / "indexes").mkdir(); (root / "indexes" / "documents.json").write_text("[]")
     out = br.query({"query": "SDS site class D", "collection": "engineering_standards_IS1893"})
     assert out["results"] == [] and "US term 'SDS'" in out["note"] and "Z, I, Sa/g" in out["note"]   # the corpus's own trap, relayed
     assert (root / "queue" / "agent_queries.jsonl").exists()
@@ -732,8 +733,10 @@ def test_design_modules_ground_through_the_query_file_manager_server():
         assert m.server.get("requires") == ["engineering_rag_india"]
         assert m.env_vars["RAG_API_URL"] == "{server.engineering_rag_india}/query"
     q = cat["engineering_rag_india"]
-    assert q.name == "IS corpus (Query file manager)" and q.has_server
+    assert q.name == "IS corpus (your own conversions)" and q.has_server
+    assert q.bundled == "engineering_rag_india" and not q.git and not q.private     # ships with the hub, no clone
     assert (config.CATALOG_DIR / "engineering_rag_india" / "rag_server.py").exists()
+    assert (config.CATALOG_DIR / "engineering_rag_india" / "scripts" / "retrieval.py").exists()
     assert any(t.kind == "embed" for t in q.tabs)
 
 
@@ -757,10 +760,10 @@ def test_modules_can_be_renamed_by_the_user():
     from steltic_hub.registry import Registry
     reg = Registry()
     try:
-        assert reg.name("engineering_rag_india") == "IS corpus (Query file manager)"
+        assert reg.name("engineering_rag_india") == "IS corpus (your own conversions)"
         assert reg.rename("engineering_rag_india", "  QFM  ") == "QFM"
         assert Registry().name("engineering_rag_india") == "QFM"           # persisted in state.json
-        assert reg.rename("engineering_rag_india", "") == "IS corpus (Query file manager)"
+        assert reg.rename("engineering_rag_india", "") == "IS corpus (your own conversions)"
     finally:
         reg.rename("engineering_rag_india", "")
 
@@ -790,7 +793,7 @@ def test_uploads_are_not_capped_and_names_come_from_the_registry():
         r = c.post("/api/jobs/UpTest/upload", files={"files": ("a b.json", b"{}" * 10, "application/json")})
         assert r.json()["files"][0]["name"] == "a_b.json"
         mods = {m["id"]: m for m in c.get("/api/state").json()["modules"]}
-        assert mods["engineering_rag_india"]["default_name"] == "IS corpus (Query file manager)"
+        assert mods["engineering_rag_india"]["default_name"] == "IS corpus (your own conversions)"
         assert "servers_used" in mods["steltic_india"] and "engineering_rag_india" in mods["steltic_india"]["servers_used"]
         c.delete("/api/jobs/UpTest")
 

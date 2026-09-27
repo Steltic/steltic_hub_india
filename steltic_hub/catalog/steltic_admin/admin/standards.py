@@ -1,17 +1,17 @@
 """The standards queue: a folder of licensed BIS specification PDFs -> one Convert run each, in turn.
 
 Converting a specification through the IS corpus module takes hours (Docling at full accuracy, OCR on
-the scanned BIS prints), and the India corpus holds seventeen documents. Normally nothing needs
-converting: the private engineering_rag_india repo already carries the converted documents and the
-hub's post-install copies them into the workspace. This queue is for a document the repo does not
-carry, or for re-converting one from your own licensed copy: one `convert` step per PDF that is not
-converted yet, each with its canonical stem, then `index` once, then `validate` once. Everything else
+the scanned BIS prints), and the India corpus has seventeen canonical documents. The hub ships no
+standard text: the corpus starts empty and this queue is its first pass, from PDFs the user licensed:
+one `convert` step per PDF that is not converted yet, each with its canonical stem, then `index` once,
+then `validate` once. The corpus-fix step (CORPUS_FIX_LLM_INSTRUCTIONS.md) and the IS corpus module's
+Import fixed corpus tab come after. Everything else
 -- the retries on a native crash, the resume from the last finished chunk, the converter gate -- is
 the hub's and the module's own behaviour; Admin only presses the buttons.
 
 Canonical stems are fixed by the corpus (retrieval ids and the engineering_standards_IS* collection
 map depend on them); the table below guesses one from a file name and the user confirms or corrects it
-in the UI before anything is queued. The stems are those of the corpus README.
+in the UI before anything is queued. The stems are those of the IS corpus module's Convert tab.
 """
 from __future__ import annotations
 import pathlib, re

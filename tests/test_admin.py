@@ -220,7 +220,7 @@ def fake_hub():
          "tabs": [{"id": "run", "title": "Run", "kind": "form", "run": {"kind": "cli"}, "missing_optional": [],
                    "fields": [{"id": "job", "type": "project", "label": "Project", "required": True},
                               {"id": "package", "type": "file", "label": "Package", "required": False, "has_default": True}]}]},
-        {"id": "engineering_rag_india", "name": "Query file manager", "status": {"env_ready": True}, "missing_needs": [], "wants_credentials": False,
+        {"id": "engineering_rag_india", "name": "IS corpus (your own conversions)", "status": {"env_ready": True}, "missing_needs": [], "wants_credentials": False,
          "tabs": [{"id": "convert", "title": "Convert PDF", "kind": "form", "run": {"kind": "cli"}, "missing_optional": ["converter"],
                    "fields": [{"id": "pdf", "type": "file", "label": "PDF", "required": True}]}]},
         {"id": "not_installed", "name": "Absent", "status": {"env_ready": False}, "missing_needs": [], "tabs": [{"id": "x", "title": "X", "kind": "form", "run": {"kind": "cli"}, "fields": []}]},

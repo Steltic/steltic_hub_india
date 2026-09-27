@@ -1,15 +1,13 @@
 {
   "schema": 1,
   "id": "engineering_rag_india",
-  "name": "IS corpus (Query file manager)",
-  "blurb": "The India standards corpus — IS 800, IS 801, IS 811, IS 808, IS 1161, IS 2062, IS 875 (Parts 1–5), IS 1893 (Part 1):2016 + Amd 1/2, IS 18168:2023 and the connection standards — converted from licensed BIS PDFs, with the full-text / exact-id search the design agents ground their clauses on. PRIVATE repository: Install clones it with this PC's own GitHub credentials, or link a working copy on disk. No vector DB; nothing leaves this PC.",
+  "name": "IS corpus (your own conversions)",
+  "blurb": "The India standards corpus, built on this PC from BIS PDFs you licensed yourself — IS 800, IS 801, IS 811, IS 808, IS 1161, IS 2062, IS 875 (Parts 1–5), IS 1893 (Part 1):2016 + Amd 1/2, IS 18168:2023 and the connection standards — with the full-text / exact-id search the design agents ground their clauses on. The hub ships the tooling only, never standard text: a fresh install is an EMPTY corpus. Workflow: (1) convert your PDFs (Admin → Standards, or Convert), Rebuild index, Validate corpus; (2) the corpus-fix step: zip the corpus folder with your PDFs and CORPUS_FIX_LLM_INSTRUCTIONS.md for a frontier LLM agent with code execution; (3) Import fixed corpus. No vector DB; nothing leaves this PC unless you send it.",
   "accent": "#7b93e8",
   "order": 40,
-  "homepage": "https://github.com/Steltic/engineering_rag_india",
+  "homepage": "https://github.com/Steltic/steltic_hub_india",
   "source": {
-    "url": "https://github.com/Steltic/engineering_rag_india",
-    "branch": "main",
-    "private": true
+    "bundled": "engineering_rag_india"
   },
   "env": {
     "python": "3.12",
@@ -17,7 +15,7 @@
     "post_install": [
       [
         "-c",
-        "import shutil,pathlib,os,stat\nsrc=pathlib.Path(r\"{module_dir}\"); dst=pathlib.Path(r\"{data_dir}\")/\"grokbot\"\ndst.mkdir(parents=True,exist_ok=True)\n\n# ---- 1. the corpus DATA: converted BIS documents, unified indexes, the FTS index -----------------\n# engineering_rag_india carries the converted documents (documents/standards/<STEM>/...), the unified\n# indexes (indexes/*.json) and the spec FTS (search/spec_fts.sqlite) in the repo itself. They are\n# copied into the workspace as data. The query cache is not copied: retrieval rebuilds it, and its\n# fingerprint covers the page markdown so a stale one would only be discarded.\nfor name in (\"documents\", \"indexes\", \"search\"):\n    c = src/name\n    if c.is_dir():\n        shutil.copytree(c, dst/name, dirs_exist_ok=True)\n        print(\"[is-corpus] copied\", name)\n    else:\n        print(\"[is-corpus] WARNING: the checkout has no\", name, \"folder\")\n\n# ---- 2. the module's scripts, LAST, so code always wins over anything a data bundle carries -----\n# The workspace keeps its own copy because the tabs and the grounding server run from the workspace\n# and retrieval.find_root expects scripts/ beside documents/. Copied file by file with the\n# read-only bit cleared, because copytree leaves a read-only destination in place without a word.\nif (src/\"scripts\").is_dir():\n    (dst/\"scripts\").mkdir(parents=True, exist_ok=True)\n    replaced, failed = [], []\n    for f in sorted((src/\"scripts\").rglob(\"*\")):\n        if f.is_dir() or \"__pycache__\" in f.parts:\n            continue\n        t = dst/\"scripts\"/f.relative_to(src/\"scripts\")\n        t.parent.mkdir(parents=True, exist_ok=True)\n        if t.is_file() and t.stat().st_size == f.stat().st_size and t.read_bytes() == f.read_bytes():\n            continue\n        try:\n            if t.exists():\n                os.chmod(t, stat.S_IWRITE | stat.S_IREAD)\n            shutil.copy2(f, t)\n            replaced.append(f.name)\n        except OSError as e:\n            failed.append(f\"{f.name} ({e.__class__.__name__})\")\n    if replaced:\n        print(\"[is-corpus] workspace scripts refreshed:\", \", \".join(replaced))\n    if failed:\n        print(\"[is-corpus] COULD NOT REFRESH:\", \", \".join(failed))\n        raise SystemExit(\"[is-corpus] the workspace code is older than the module -- queries would use the OLD code\")\n\n# ---- 3. prove it, rather than assume it --------------------------------------------------------\nstale=[]\nfor n in (\"retrieval.py\",\"build_index.py\",\"search.py\",\"query_cache.py\",\"pipeline_fixes.py\"):\n    a, b = src/\"scripts\"/n, dst/\"scripts\"/n\n    if not a.is_file():\n        continue\n    if not b.is_file() or a.read_bytes() != b.read_bytes():\n        stale.append(n)\nif stale:\n    raise SystemExit(\"[is-corpus] workspace code does not match the module: \" + \", \".join(stale))\n\nfor d in (\"documents/standards\",\"queue/in\",\"queue/out\",\"queue/done\",\"cache\"):\n    (dst/d).mkdir(parents=True,exist_ok=True)\nn = sum(1 for d in (dst/\"documents\"/\"standards\").iterdir() if d.is_dir()) if (dst/\"documents\"/\"standards\").is_dir() else 0\nprint(\"[is-corpus] workspace ready at\", dst, \"--\", n, \"document folders,\", \"FTS present\" if (dst/\"search\"/\"spec_fts.sqlite\").is_file() else \"NO FTS index (run Rebuild index)\")\n"
+        "import shutil,pathlib,os,stat,subprocess,sys\nmod=pathlib.Path(r\"{module_dir}\"); src=mod/\"scripts\"; dst=pathlib.Path(r\"{data_dir}\")/\"grokbot\"\n\n# ---- 1. the workspace corpus, EMPTY on a fresh install ---------------------------------------\n# The hub ships the corpus tooling only -- no BIS text, tables, figures or transcriptions. You build\n# the corpus from your own licensed PDFs. An existing workspace (documents you converted, a fixed\n# corpus you imported) is kept as it is: nothing below deletes or overwrites corpus data.\nfor d in (\"documents/standards\",\"queue/in\",\"queue/out\",\"queue/done\",\"cache\",\"indexes\",\"search\",\"pdfs\"):\n    (dst/d).mkdir(parents=True,exist_ok=True)\n\n# ---- 2. the bundled tooling: code always refreshed, data files only seeded --------------------\n# *.py are copied every time (code always wins; the tabs and the grounding server run from the\n# workspace, and retrieval.find_root expects scripts/ beside documents/). Data files (*.json:\n# aliases.json, and the corpus-fix data such as quality.json) are copied only when missing, so an\n# update never replaces what the corpus-fix step gave you. Read-only bits are cleared first,\n# because copytree leaves a read-only destination in place without a word.\n(dst/\"scripts\").mkdir(parents=True, exist_ok=True)\nreplaced, failed = [], []\nfor f in sorted(src.rglob(\"*\")):\n    if f.is_dir() or \"__pycache__\" in f.parts:\n        continue\n    t = dst/\"scripts\"/f.relative_to(src)\n    t.parent.mkdir(parents=True, exist_ok=True)\n    if t.is_file() and (f.suffix != \".py\" or (t.stat().st_size == f.stat().st_size and t.read_bytes() == f.read_bytes())):\n        continue\n    try:\n        if t.exists():\n            os.chmod(t, stat.S_IWRITE | stat.S_IREAD)\n        shutil.copy2(f, t)\n        replaced.append(f.name)\n    except OSError as e:\n        failed.append(f\"{f.name} ({e.__class__.__name__})\")\nif replaced:\n    print(\"[is-corpus] workspace scripts refreshed:\", \", \".join(replaced))\nif failed:\n    print(\"[is-corpus] COULD NOT REFRESH:\", \", \".join(failed))\n    raise SystemExit(\"[is-corpus] the workspace code is older than the module -- queries would use the OLD code\")\n\n# ---- 3. prove it, rather than assume it --------------------------------------------------------\nstale=[n for n in (\"retrieval.py\",\"build_index.py\",\"search.py\",\"query_cache.py\",\"pipeline_fixes.py\",\"validate.py\",\"import_corpus_zip.py\")\n       if (src/n).is_file() and (not (dst/\"scripts\"/n).is_file() or (src/n).read_bytes() != (dst/\"scripts\"/n).read_bytes())]\nif stale:\n    raise SystemExit(\"[is-corpus] workspace code does not match the module: \" + \", \".join(stale))\n\n# ---- 4. an index, even an empty one, so the grounding server starts and answers \"not in the corpus\"\nif not (dst/\"search\"/\"spec_fts.sqlite\").is_file() or not (dst/\"indexes\"/\"documents.json\").is_file():\n    rc = subprocess.call([sys.executable, str(dst/\"scripts\"/\"build_index.py\"), \"--root\", str(dst), \"--no-repair\"],\n                         stdout=subprocess.DEVNULL, cwd=str(dst))\n    print(\"[is-corpus] index built\" if rc == 0 else f\"[is-corpus] WARNING: build_index.py exited {rc} (run Rebuild index)\")\n\nstd = dst/\"documents\"/\"standards\"\nn = sum(1 for d in std.iterdir() if d.is_dir())\nprint(\"[is-corpus] workspace ready at\", dst, \"--\", n, \"document folders\")\nif n == 0:\n    print(\"[is-corpus] The corpus is EMPTY. The hub ships no standard text: build it from BIS PDFs you licensed yourself.\")\n    print(\"[is-corpus]   1. Admin -> Standards (a folder of PDFs) or IS corpus -> Convert (one PDF); then Rebuild index, Validate corpus\")\n    print(\"[is-corpus]   2. corpus-fix step: zip\", dst, \"with your PDFs and CORPUS_FIX_LLM_INSTRUCTIONS.md for an LLM agent\")\n    print(\"[is-corpus]   3. IS corpus -> Import fixed corpus (it rebuilds the index and validates)\")\n"
       ]
     ],
     "optional": {
@@ -31,7 +29,7 @@
           "rapidocr",
           "onnxruntime"
         ],
-        "help": "Only needed to convert a BIS PDF you licensed yourself (the corpus repo already carries the converted documents). Large download (ML stack). The corpus pins 2.123.1 — do not upgrade without revalidating retrieval accuracy. The [rapidocr] extra adds onnxruntime, which convert_pdf.py's RapidOCR fallback needs on the scanned BIS prints (IS 801, IS 811, IS 816, IS 875-5)."
+        "help": "Needed to convert your own licensed BIS PDFs — the hub ships no converted documents. Large download (ML stack). The corpus tooling pins 2.123.1 — do not upgrade without revalidating retrieval accuracy. The [rapidocr] extra adds onnxruntime, which convert_pdf.py's RapidOCR fallback needs on the scanned BIS prints (IS 801, IS 811, IS 816, IS 875-5)."
       }
     }
   },
@@ -48,14 +46,14 @@
       "id": "corpus",
       "title": "Corpus",
       "kind": "form",
-      "blurb": "What this machine actually has: the converted BIS documents, their edition, collection name and quality grade (PASS / REPAIRED / DEGRADED with the known defects from the corpus README), and the FTS index. Run this first.",
+      "blurb": "What this machine has: the BIS documents you converted, their edition, collection name and quality grade, the FTS index and the last validation. Run this first. The hub ships no standard text, so a fresh install shows an EMPTY corpus and the three steps that build it: convert your licensed PDFs, the corpus-fix step (CORPUS_FIX_LLM_INSTRUCTIONS.md), Import fixed corpus.",
       "run": {
         "kind": "cli",
         "cwd": "{data_dir}/grokbot",
         "label": "Check corpus",
         "command": [
           "-c",
-          "import pathlib,sqlite3,json,sys\nroot=pathlib.Path(r\"{data_dir}\")/\"grokbot\"\nprint(\"workspace:\", root)\nstd=root/\"documents\"/\"standards\"\nstems=sorted(d.name for d in std.iterdir() if d.is_dir()) if std.is_dir() else []\nprint()\nprint(\"== converted BIS documents (documents/standards/<STEM>) ==\")\nprint(\"  document folders:\", len(stems))\nidx=root/\"indexes\"/\"documents.json\"\nmeta={}\nif idx.is_file():\n    d=json.loads(idx.read_text(encoding=\"utf-8\"))\n    rows=d if isinstance(d,list) else list(d.values())\n    for r in rows:\n        if isinstance(r,dict) and r.get(\"id\"): meta[r[\"id\"]]=r\nfor s in stems:\n    r=meta.get(s) or {}\n    print(f\"   - {s:26} edition {str(r.get('edition') or '?'):12} {str(r.get('collection_name') or ''):32} quality {r.get('quality') or '(not indexed)'}\")\n    for k in (r.get(\"known_defects\") or [])[:3]: print(\"       !\", k[:110])\nprint()\nprint(\"== search index ==\")\nf=root/\"search\"/\"spec_fts.sqlite\"\nif f.is_file():\n    try:\n        c=sqlite3.connect(f\"file:{f}?mode=ro\", uri=True); n=c.execute(\"select count(*) from chunks\").fetchone()[0]\n        print(f\"  spec_fts.sqlite  {n:>7} chunks   the IS documents\")\n    except Exception as e: print(f\"  spec_fts.sqlite  present but unreadable: {e}\")\nelse:\n    print(\"  spec_fts.sqlite  MISSING -- run Rebuild index (or reinstall the module)\")\nprint(\"  (no OpenSees / worked-example collections: the India corpus serves the IS documents only)\")\nprint()\nmissing=[s for s in stems if s not in meta]\nif missing: print(\"NOTE: folders not in indexes/documents.json (run Rebuild index):\", \", \".join(missing))\nif not f.is_file():\n    print(\"NEXT: install or update the IS corpus module -- its post-install copies the documents, indexes and search\")\n    print(\"      scripts from the private engineering_rag_india checkout (git clone with your credentials, or a linked working copy).\")\nelse:\n    print(\"IS corpus present. The design agents ground their clauses here (RAG_API_URL).\")\n"
+          "import pathlib,sqlite3,json,sys\nroot=pathlib.Path(r\"{data_dir}\")/\"grokbot\"\nprint(\"corpus folder (zip THIS folder for the corpus-fix step):\", root)\nstd=root/\"documents\"/\"standards\"\nstems=sorted(d.name for d in std.iterdir() if d.is_dir()) if std.is_dir() else []\nprint()\nprint(\"== converted BIS documents (documents/standards/<STEM>) ==\")\nprint(\"  document folders:\", len(stems))\nidx=root/\"indexes\"/\"documents.json\"\nmeta={}\nif idx.is_file():\n    d=json.loads(idx.read_text(encoding=\"utf-8\"))\n    rows=d if isinstance(d,list) else list(d.values())\n    for r in rows:\n        if isinstance(r,dict) and r.get(\"id\"): meta[r[\"id\"]]=r\nfor s in stems:\n    r=meta.get(s) or {}\n    print(f\"   - {s:26} edition {str(r.get('edition') or '?'):12} {str(r.get('collection_name') or ''):32} quality {r.get('quality') or '(not indexed)'}\")\n    for k in (r.get(\"known_defects\") or [])[:3]: print(\"       !\", k[:110])\nprint()\nprint(\"== search index ==\")\nf=root/\"search\"/\"spec_fts.sqlite\"\nif f.is_file():\n    try:\n        c=sqlite3.connect(f\"file:{f}?mode=ro\", uri=True); n=c.execute(\"select count(*) from spec_fts\").fetchone()[0]\n        print(f\"  spec_fts.sqlite  {n:>7} rows   the IS documents\")\n    except Exception as e: print(f\"  spec_fts.sqlite  present but unreadable: {e}\")\nelse:\n    print(\"  spec_fts.sqlite  MISSING -- run Rebuild index\")\nprint(\"  (no OpenSees / worked-example collections: the India corpus serves the IS documents only)\")\nv=root/\"indexes\"/\"validate_corpus.json\"\nif v.is_file():\n    try:\n        vr=json.loads(v.read_text(encoding=\"utf-8\"))\n        print(\"  last Validate corpus:\", \"PASS\" if vr.get(\"passed\") else \"FAIL\")\n    except Exception: pass\nprint()\nmissing=[s for s in stems if s not in meta]\nif missing: print(\"NOTE: folders not in indexes/documents.json (run Rebuild index):\", \", \".join(missing))\nif not stems:\n    print(\"The corpus is EMPTY. The hub ships no standard text: build it from BIS PDFs you licensed yourself.\")\n    print(\"  1. first pass: Admin -> Standards (a folder of PDFs) or Convert (one PDF), then Rebuild index, Validate corpus\")\n    print(\"  2. corpus fix: zip the folder above with your PDFs and CORPUS_FIX_LLM_INSTRUCTIONS.md (hub repository root)\")\n    print(\"     and give them to a frontier LLM agent with code execution; it returns a fixed corpus zip\")\n    print(\"  3. Import fixed corpus (this module): backs up, replaces, rebuilds the index and validates\")\nelif not f.is_file():\n    print(\"NEXT: run Rebuild index, then Validate corpus\")\nelse:\n    print(\"IS corpus present. The design agents ground their clauses here (RAG_API_URL).\")\n"
         ]
       },
       "fields": [
@@ -239,7 +237,7 @@
       "id": "convert",
       "title": "Convert PDF",
       "kind": "form",
-      "blurb": "Convert a BIS PDF you licensed yourself with Docling at full accuracy (TableFormer ACCURATE, formula enrichment on, OCR fallback for scanned prints), post-processed with the is_bis profile. Only needed for a document the corpus repo does not already carry, or to re-convert one from your own copy; the output lands in documents/standards/<STEM>. Needs the optional component \"PDF converter (Docling 2.123.1)\" — install it once from the Modules tab (large download, the ML stack); the hub refuses to run this tab until it is present. Then run Rebuild index and Validate corpus. The licence watermark of BIS PDFs is stripped by the post-processing (strip_watermark.py --check reports what remains).",
+      "blurb": "Convert a BIS PDF you licensed yourself with Docling at full accuracy (TableFormer ACCURATE, formula enrichment on, OCR fallback for scanned prints), post-processed with the is_bis profile; the output lands in documents/standards/<STEM>. This is the first pass of the corpus: every document the agents ground on comes from here (or from Admin → Standards, which queues a folder of PDFs through this tab). Needs the optional component \"PDF converter (Docling 2.123.1)\" — install it once from the Modules tab (large download, the ML stack); the hub refuses to run this tab until it is present. Then run Rebuild index and Validate corpus, and the corpus-fix step (CORPUS_FIX_LLM_INSTRUCTIONS.md) for what a first pass gets wrong. The licence watermark of BIS PDFs is stripped by the post-processing (strip_watermark.py --check reports what remains).",
       "run": {
         "kind": "cli",
         "cwd": "{data_dir}/grokbot",
@@ -392,7 +390,7 @@
       "id": "reprocess",
       "title": "Re-process",
       "kind": "form",
-      "blurb": "Rebuild one converted document's searchable markdown, sections, equations and tables from the Docling chunks already on disk — no re-conversion, minutes not hours. Use it after a pipeline fix, or when a document's text looks like another's. Pick the stem, and give it the source PDF if you have it (equation ids, table captions and ligature repair all read it), then run Rebuild index.",
+      "blurb": "Rebuild one converted document's searchable markdown, sections, equations and tables from the Docling chunks already on disk — no re-conversion, minutes not hours. Use it after a tooling update, or when a document's text looks like another's. Pick the stem, and give it the source PDF if you have it (equation ids, table captions and ligature repair all read it), then run Rebuild index.",
       "run": {
         "kind": "cli",
         "cwd": "{data_dir}/grokbot",
@@ -520,7 +518,7 @@
       "id": "index",
       "title": "Rebuild index",
       "kind": "form",
-      "blurb": "Rebuild the unified indexes (sections, tables, equations, documents with edition and quality) and the FTS index after converting or revising documents: per-document BIS index repair, then the unified build. Follow it with Validate corpus.",
+      "blurb": "Rebuild the unified indexes (sections, tables, equations, documents with edition and quality) and the FTS index after converting, re-processing or importing: the per-document BIS index repair (only where the source PDF is found: its recorded path, $INDIA_PDF_DIRS or <corpus>/pdfs/<STEM>.pdf), then the unified build. Tick \"Skip the per-document repair\" after importing a fixed corpus, so its indexes are kept as they came. Follow it with Validate corpus.",
       "run": {
         "kind": "cli",
         "cwd": "{data_dir}/grokbot",
@@ -536,6 +534,15 @@
           "id": "job",
           "type": "project",
           "label": "Project"
+        },
+        {
+          "id": "no_repair",
+          "type": "checkbox",
+          "label": "Skip the per-document repair (keep the indexes as they are)",
+          "arg": "--no-repair",
+          "arg_style": "flag-if-true",
+          "default": false,
+          "help": "For a corpus fixed by the corpus-fix step and imported: the repair re-derives the per-document indexes from the PDF text layer and could undo index fixes."
         }
       ]
     },
@@ -543,7 +550,7 @@
       "id": "validate",
       "title": "Validate corpus",
       "kind": "form",
-      "blurb": "The corpus's must-hit probes (validate.py --corpus): clause, table and section-row lookups that must answer (IS 1893 Table 9 Note 1, IS 800 7.1.2.1, IS 808 HB 300, the town annexes, IS 18168 5.5), the US-term trap, and a grep that no licence watermark line survives in any text artefact. Exit 1 = the build is not usable. Rebuild index first.",
+      "blurb": "The corpus's must-hit probes (validate.py --corpus) for every document you converted (the others are skipped): clause and table ids the agents ask for most (IS 1893 7.2.6 / Table 9, IS 800 7.1.2.1 / Annex D, IS 875-3 6.3.4, IS 18168 5.5 …) with short key-phrase checks, the town lookup, the \"not in the corpus\" note, the US-term trap, and a grep that no licence watermark line survives in any text artefact. Advisory [corpus-fix] lines report what the corpus-fix step normally adds (figure transcriptions, section-property rows). Exit 1 = the build is not usable; a first pass often fails some probes — that is what the corpus-fix step is for. Rebuild index first.",
       "run": {
         "kind": "cli",
         "cwd": "{data_dir}/grokbot",
@@ -562,6 +569,59 @@
           "id": "job",
           "type": "project",
           "label": "Project"
+        }
+      ],
+      "artifacts": []
+    },
+    {
+      "id": "import",
+      "title": "Import fixed corpus",
+      "kind": "form",
+      "blurb": "Step 3 of the workflow: put the fixed corpus zip returned by the corpus-fix step (CORPUS_FIX_LLM_INSTRUCTIONS.md) in place of this PC's corpus. The zip is checked first (documents/standards/<STEM>/ at the top or under one folder; unsafe paths refused), the grounding server is stopped, the current documents/, indexes/, search/, cache/ and scripts/*.json go to <data>/grokbot_backups/<time>/ (move them back to undo), and the zip's are moved in. The hub's code is never replaced: scripts/*.py in the zip are kept aside in the backup for review, scripts/*.json (quality.json and the other corpus data) are applied, PDFs are ignored. Then Rebuild index (no repair) and Validate corpus run, and the server starts again.",
+      "run": {
+        "kind": "cli",
+        "cwd": "{data_dir}/grokbot",
+        "label": "Import",
+        "command": [
+          "{data_dir}/grokbot/scripts/import_corpus_zip.py",
+          "{f.zip}",
+          "--root",
+          "{data_dir}/grokbot",
+          "--hub-url",
+          "{hub_url}",
+          "--module",
+          "engineering_rag_india"
+        ]
+      },
+      "fields": [
+        {
+          "id": "job",
+          "type": "project",
+          "label": "Project"
+        },
+        {
+          "id": "zip",
+          "type": "file",
+          "label": "Fixed corpus zip",
+          "accept": ".zip",
+          "required": true,
+          "help": "The zip the LLM agent returned. Nothing is uploaded anywhere — it is unpacked on this machine."
+        },
+        {
+          "id": "rebuild",
+          "type": "checkbox",
+          "label": "Rebuild index (no repair) and Validate corpus afterwards",
+          "arg": "--rebuild",
+          "arg_style": "flag-if-true",
+          "default": true
+        },
+        {
+          "id": "dry_run",
+          "type": "checkbox",
+          "label": "Check the zip only (change nothing)",
+          "arg": "--dry-run",
+          "arg_style": "flag-if-true",
+          "default": false
         }
       ],
       "artifacts": []
@@ -604,7 +664,7 @@
       "title": "Grounding",
       "kind": "embed",
       "src": "/",
-      "blurb": "What the design agents are asking this corpus, and what they got back. HR Steel (IS 800) and CFS (IS 801) point their standards search here automatically (RAG_API_URL)."
+      "blurb": "What the design agents are asking this corpus, and what they got back. HR Steel (IS 800), CFS (IS 801) and the Nonlinear Review point their standards search here automatically (RAG_API_URL). An empty corpus answers every question \"not in the corpus\" — the agents then cite from memory and flag every value."
     },
     {
       "id": "files",
