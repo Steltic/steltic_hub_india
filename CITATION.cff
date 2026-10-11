@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Steltic Hub India: AI steel design to Indian Standards"
+authors:
+  - name: "Steltic"
+version: "0.2.2"
+date-released: "2026-10-11"
+license: MIT
+repository-code: "https://github.com/Steltic/steltic_hub_india"
+url: "https://stelticai.com/india.html"
+keywords: [structural engineering, steel design, IS 800, IS 1893, Indian Standards, OpenSees, AI agent]

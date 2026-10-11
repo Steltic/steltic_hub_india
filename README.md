@@ -1,10 +1,21 @@
 # Steltic Hub India
 
-One window over every Steltic India module. The hub installs each module from GitHub into its own
-Python environment, renders its input tabs from a manifest, runs it, and frames its viewers — so
-`steltic_viewer_bundle.html` stops being a results-only page and becomes the app. It is the India
-edition of [`steltic_hub`](https://github.com/Steltic/steltic_hub): same shell, same mechanics, the
-IS 800 / IS 801 / IS 875 / IS 1893 modules behind it.
+[![License: MIT](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Steltic/steltic_hub_india?color=orange)](https://github.com/Steltic/steltic_hub_india/releases)
+[![Python](https://img.shields.io/badge/python-any%20%2B%20uv-blue.svg)](pyproject.toml)
+
+![Steltic Hub India](docs/img/social_hub.png)
+
+One local app over every Steltic India module: HR steel (IS 800), cold-formed steel (IS 801 / IS 811), nonlinear checks, the IS corpus, design variations and probabilistic analysis.
+
+- **Start here.** The Hub installs the design modules for you.
+- **See the output first:** 34 worked Indian designs and 19 nonlinear runs with reports and 3D models at
+  [stelticai.com/india.html](https://stelticai.com/india.html).
+- **Setup video:** [YouTube](https://www.youtube.com/watch?v=lcKjj9wLcno).
+
+> Steltic assists with structural design but does not replace a licensed professional engineer. All output
+> must be independently verified.
+
 
 ```
    Tauri window / Edge --app / any browser              <- swappable, ~0 logic
@@ -64,6 +75,10 @@ git clone https://github.com/Steltic/steltic_hub_india
 cd steltic_hub_india
 windows\Steltic.bat            # first run fetches uv + Python + the hub, then opens the window
 ```
+
+If you downloaded the repo as a ZIP instead of cloning it, Windows may show a SmartScreen or 'Open File –
+Security Warning' prompt for `Steltic.bat` because the script is not code-signed. Choose More info → Run
+anyway, or clone with git.
 
 **Linux and macOS**
 
@@ -524,7 +539,7 @@ that turns one brief into a design-variation study:
    into a list; or let the model propose the whole list. Every variation is `title / change /
    why`, editable in place; M001 is always the base unchanged. The templates are written in IS terms
    (zone II–V, soil type I–III, importance factor, R from IS 1893 Table 9, the IS 800 Section 12
-   systems, IS 2062 grades, IS 808 sections); systems with no Indian basis are not offered. Without
+   systems, IS 2062 (Part 1) grades, IS 808 sections); systems with no Indian basis are not offered. Without
    an LLM connection the built-in template library is used instead of the model.
 3. **Design** — each variation goes to HR Steel as its own building (`<project>_M0xx`) with the
    base brief plus a "change ONLY this" block; the package is downloaded when it finishes and
@@ -569,7 +584,7 @@ sampling is applied to the design's own **elastic IS 800 limit-state model** ins
 2. **Run** — the number of as-built variations (default 100) and the random variables, each with
    its default distribution and source: E (nominal 2 × 10⁵ MPa), plate thickness per section
    group (fabrication factor), a storey-by-storey out-of-plumb profile in X and Y (σ = 1/1000 so 2σ
-   is the H/500 erection tolerance), and optionally the dead load (off by default). fᵧ (IS 2062),
+   is the H/500 erection tolerance), and optionally the dead load (off by default). fᵧ (IS 2062 (Part 1)),
    residual stresses and member out-of-straightness are deliberately *not* varied: they live on the
    capacity side, and the design strengths are held at the design values. Each realisation is one
    full analysis of the perturbed model — every IS 800 Table 4 / IS 1893 combination of the package's
@@ -625,7 +640,7 @@ The Nonlinear module's manifest (`catalog/steltic_nonlinear_india.json`) declare
   analysis; results are for information**: the reports give drifts, ductility demands, hinge rotations
   against the IS 800 Section 12 deformation capacities (0.02 / 0.04 rad) as reference, base shear
   against VB and λu, and no verdict. The tab's second button, **Collect specification values**
-  (`snl collect`, `run.llm`, IS corpus), comes first: it reads IS 2062 fy / fu, IS 18168 Ry / Ru,
+  (`snl collect`, `run.llm`, IS corpus), comes first: it reads IS 2062 (Part 1) fy / fu, IS 18168 Ry / Ru,
   the IS 800 Section 12 capacity for the system and the IS 1893 Z / I / Sa/g / damping out of the
   corpus with exact lookups, has the model copy each value with its cell, checks every quote, and
   writes `hinge_params_collected.json`. *Run analyses* stays closed (`run.requires`) until that file
@@ -648,7 +663,7 @@ The Nonlinear module's manifest (`catalog/steltic_nonlinear_india.json`) declare
 * **Review** (form, `run.llm`) — `snl review`: the model reads what the run measured (the IS 1893 DBE /
   MCE response, the pushover curve and mechanism, the DDM λu, the design-criteria draft), looks the
   clauses it cites up in the IS corpus through `RAG_API_URL = {server.engineering_rag_india}/query`
-  (IS 1893, IS 800, IS 18168, IS 2062, IS 808, IS 875 -- never the US Query file manager), and writes
+  (IS 1893, IS 800, IS 18168, IS 2062 (Part 1), IS 808, IS 875 -- never the US Query file manager), and writes
   `review.md` / `review.html` in the project folder: the response quantities, the margins against the IS
   reference values, what to change and why, each clause cited from the passage it read
   (`review_transcript.json` keeps them). No pass/fail verdict (D7). It streams as the design agents do:
@@ -714,12 +729,12 @@ identity; the differences are in what it fronts and what the bundled modules rea
 
 | | steltic_hub (US) | steltic_hub_india |
 |---|---|---|
-| package / version | `steltic-hub` 0.2.2 | `steltic-hub-india` 0.1.0 (Python package still `steltic_hub`) |
+| package / version | `steltic-hub` 0.2.2 | `steltic-hub-india` 0.2.2 (Python package still `steltic_hub`) |
 | title, port, data dir | Steltic Hub, 8300, `Steltic`, module ports 8410+ | Steltic Hub India, 8301, `steltic_hub_india`, module ports 8460+ |
 | accents | the viewer bundle's orange / green / blue | saffron `#ff9933` (HR Steel), India green `#3cb043` (CFS), navy-blue `#7b93e8` (Nonlinear, corpus) on the same dark shell |
 | catalog | `steltic`, `steltic_cfs`, `steltic_nonlinear`, `steltic_grokbot` | `steltic_india`, `steltic_CFS_india`, `steltic_nonlinear_india`; `engineering_rag_india` (IS corpus) is bundled |
 | example briefs | `ex1 … ex35` / `redesign` (HR), `ex1 … ex30` (CFS) | `in1 … in15` (the 15 `IN_Ex*` / `IN_CFS_Ex*` briefs) |
-| brief fields | SDC, Ss / S1, site class, risk category, ft / psf / mph | zone II–V, Z, soil type I–III, importance factor I, R, Vb (m/s), imposed loads (kN/m²), IS 2062 grade; every label in SI |
+| brief fields | SDC, Ss / S1, site class, risk category, ft / psf / mph | zone II–V, Z, soil type I–III, importance factor I, R, Vb (m/s), imposed loads (kN/m²), IS 2062 (Part 1) grade; every label in SI |
 | corpus | `steltic_grokbot` + the "phase2" OpenSees / examples data; the user converts AISC / ASCE / AISI PDFs | the hub bundles the corpus tooling and ships no standard text; the user converts their own licensed BIS PDFs, has a frontier LLM agent fix the first pass (`CORPUS_FIX_LLM_INSTRUCTIONS.md`) and imports the result; no OpenSees or examples collections |
 | grounding bridge | collections `engineering_standards_A360 …` → `AISC_360_22 …` | `engineering_standards_IS800 …` → `IS_800_2007 …`; the corpus's US-term trap and town lookup relayed in `note` |
 | Nonlinear tabs | Run, Review (`snl review`, LLM), Feedback, Site hazard (USGS), Design criteria, Inspect, Compare, Mesh | Run (IS 1893 DBE / MCE levels), Review (`snl review`, LLM, IS corpus), Feedback, IS 1893 spectrum, Design criteria, Inspect, Compare, Mesh — no USGS; informative results, no verdict (D7) |
