@@ -39,7 +39,7 @@ One local app over every Steltic India module: HR steel (IS 800), cold-formed st
 
 | module id | name in the window | repo | what it is |
 |---|---|---|---|
-| `steltic_india` | HR Steel (IS 800) | [Steltic/steltic_india](https://github.com/Steltic/steltic_india) | hot-rolled steel design agent: IS 800:2007 limit state, IS 875 loads, IS 1893 (Part 1):2016 + Amd 1/2 seismic, IS 18168:2023 detailing; 15 `IN_Ex1 … IN_Ex15` example briefs |
+| `steltic_india` | HR Steel (IS 800) | [Steltic/steltic_india](https://github.com/Steltic/steltic_india) | hot-rolled steel design agent: IS 800:2007 limit state, IS 875 loads, IS 1893 (Part 1):2016 + Amd 1/2 seismic, IS 18168:2023 detailing; 20 `IN_Ex1 … IN_Ex20` example briefs, most common building types first (IN_Ex1–IN_Ex5, the PEB sheds, with the PEB release) |
 | `steltic_CFS_india` | CFS (IS 801) + IS 800 braced frames | [Steltic/steltic_CFS_india](https://github.com/Steltic/steltic_CFS_india) | cold-formed members (studs, tracks, joists, purlins, girts) to IS 801 / IS 811 working stress, the lateral system a hot-rolled IS 800 Section 12 braced or moment frame; 15 `IN_CFS_Ex*` briefs |
 | `steltic_nonlinear_india` | Nonlinear (SNL-IN) | [Steltic/steltic_nonlinear_india](https://github.com/Steltic/steltic_nonlinear_india) | pushover, NLRHA and the direct design method on an HR Steel package, the IS 1893 elastic spectrum at DBE and MCE, the four-analyses sheet, the Feedback loops. **IS 1893 (Part 1):2016 provides no acceptance criteria for nonlinear analysis; results are for information** — no verdict is printed |
 | `engineering_rag_india` | IS corpus (your own conversions) | bundled (`catalog/engineering_rag_india/`) | the corpus tooling (convert, index, search, validate, import) and `rag_server.py`, which answers the agents' `RAG_API_URL`. **No standard text ships with the hub**: you build the corpus from BIS PDFs you licensed yourself (see *Building the IS corpus*) |
@@ -352,7 +352,7 @@ Field types: `text`, `textarea`, `number`, `select`, `checkbox`, `file`, `files`
 `flag-if-true`). `file` values are uploads into the project folder (or a file already there) and
 reach the command as absolute paths. A `select` with `fills` (`{path, key, target}`) fetches
 `path` from the module server when a value is picked and drops `key` of the reply into the
-`target` field — that is how the example-brief pickers work (`/api/example/in1` … `in15`).
+`target` field — that is how the example-brief pickers work (`/api/example/in1` … `in20` on HR Steel, `in1` … `in15` on CFS).
 `attachments` reads `.txt`/`.md`/`.pdf` files into `text_target` in the browser and sends images along
 as `[{name, type, data_url}]`. A tab's `links` (`{label, path}`) are opened on the module server,
 e.g. a download endpoint.
@@ -532,10 +532,12 @@ that turns one brief into a design-variation study:
 
 1. **Base brief** — paste it, or load the one HR Steel already designed for this project (read
    back from the package's `conversation.json`).
-2. **Variations** — the number, and one of three ways to define them: tick any of ten categories
-   (establish the problem, braced-frame configuration, lateral system, perimeter frames, outriggers,
-   geometry and mass, members and materials, bases, seismic design choices, detailing) and the
-   model spreads the variations across them; describe the study in words and the model turns it
+2. **Variations** — the number, and one of three ways to define them: tick any of eleven categories
+   (establish the problem, portal shed (PEB) layout and economy, braced-frame configuration, lateral system,
+   perimeter frames, outriggers, geometry and mass, members and materials, bases, seismic design choices,
+   detailing) and the model spreads the variations across them — when no category is ticked, only the ones that
+   apply to the building are offered (the PEB category to single-storey sheds and warehouses; braced cores, perimeter
+   frames and outriggers to multistorey buildings, read from the base brief); describe the study in words and the model turns it
    into a list; or let the model propose the whole list. Every variation is `title / change /
    why`, editable in place; M001 is always the base unchanged. The templates are written in IS terms
    (zone II–V, soil type I–III, importance factor, R from IS 1893 Table 9, the IS 800 Section 12
@@ -611,7 +613,7 @@ it starts goes through `POST /api/run/…` exactly as a click on that tab would.
 
 * **Batch** — `J1 to hr then nl; then J2 to cfs; then J3 (in1) to hr` becomes a plan of
   `(project, module, tab, fields)` steps, checked against what is installed, then run one after
-  another with every run's stream logged to `admin/logs/`. `(in1)` … `(in15)` are the India example
+  another with every run's stream logged to `admin/logs/`. `(in1)` … `(in20)` / `(in15)` are the India example
   briefs of HR Steel and CFS. Stop, Resume, a failure policy per step, and a plan interrupted by a
   hub restart is marked so rather than restarted blind. A step is not one run: a design that was
   stopped, timed out or paused is continued from what its module saved (the tab the manifest marks
@@ -733,7 +735,7 @@ identity; the differences are in what it fronts and what the bundled modules rea
 | title, port, data dir | Steltic Hub, 8300, `Steltic`, module ports 8410+ | Steltic Hub India, 8301, `steltic_hub_india`, module ports 8460+ |
 | accents | the viewer bundle's orange / green / blue | saffron `#ff9933` (HR Steel), India green `#3cb043` (CFS), navy-blue `#7b93e8` (Nonlinear, corpus) on the same dark shell |
 | catalog | `steltic`, `steltic_cfs`, `steltic_nonlinear`, `steltic_grokbot` | `steltic_india`, `steltic_CFS_india`, `steltic_nonlinear_india`; `engineering_rag_india` (IS corpus) is bundled |
-| example briefs | `ex1 … ex35` / `redesign` (HR), `ex1 … ex30` (CFS) | `in1 … in15` (the 15 `IN_Ex*` / `IN_CFS_Ex*` briefs) |
+| example briefs | `ex1 … ex35` / `redesign` (HR), `ex1 … ex30` (CFS) | `in1 … in20` (the 20 `IN_Ex*` briefs) / `in1 … in15` (the 15 `IN_CFS_Ex*` briefs), most common types first |
 | brief fields | SDC, Ss / S1, site class, risk category, ft / psf / mph | zone II–V, Z, soil type I–III, importance factor I, R, Vb (m/s), imposed loads (kN/m²), IS 2062 (Part 1) grade; every label in SI |
 | corpus | `steltic_grokbot` + the "phase2" OpenSees / examples data; the user converts AISC / ASCE / AISI PDFs | the hub bundles the corpus tooling and ships no standard text; the user converts their own licensed BIS PDFs, has a frontier LLM agent fix the first pass (`CORPUS_FIX_LLM_INSTRUCTIONS.md`) and imports the result; no OpenSees or examples collections |
 | grounding bridge | collections `engineering_standards_A360 …` → `AISC_360_22 …` | `engineering_standards_IS800 …` → `IS_800_2007 …`; the corpus's US-term trap and town lookup relayed in `note` |

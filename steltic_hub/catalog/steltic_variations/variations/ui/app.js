@@ -130,11 +130,11 @@ function panePlan(main) {
   instr.value = p.instructions || '';
   const catBox = el('div', { class: 'cats' });
   const instrBox = el('div', {}, el('label', { class: 'f' }, 'Instructions for the study'), instr);
-  const autoBox = el('p', { class: 'hint' }, 'The model chooses across all ten categories for the widest useful spread for this building.');
+  const autoBox = el('p', { class: 'hint' }, 'The model chooses across the categories that apply to this building (single-storey shed or multistorey, read from the brief) for the widest useful spread.');
   const choices = el('div', { class: 'choices' });
   const paintMode = () => {
     choices.replaceChildren(...[
-      ['categories', 'Pick categories', 'Choose any number of the ten categories; the model spreads the variations across them.'],
+      ['categories', 'Pick categories', 'Choose any number of the eleven categories; the model spreads the variations across them.'],
       ['instructions', 'Describe the study', 'Type what you want explored; the model turns it into a variation list.'],
       ['auto', 'Let the model decide', 'The model proposes the whole list from the brief alone.'],
     ].map(([id, t, s]) => el('div', { class: 'choice' + (mode === id ? ' on' : ''), onclick: () => { mode = id; paintMode(); } }, el('b', {}, t), el('span', {}, s))));

@@ -28,7 +28,7 @@ os.environ["STELTIC_URL"] = "http://127.0.0.1:1"
 from probabilistic import stats as S, variables as V     # noqa: E402
 from probabilistic import main as pm                     # noqa: E402
 
-# ---------------------------------------------------------------- a design package (IN_Ex1-like, tiny; N, N-mm)
+# ---------------------------------------------------------------- a design package (IN_Ex13-like, tiny; N, N-mm)
 # Shaped like steltic_india's calc_package.json: demands in inputs (P_comp_N, Mz_Nmm ...), the recorded IS 800
 # design strengths under capacity.<check>.<Xd_N | Md_Nmm> (Rd = Rn / gamma_m), the recorded D/C = D/Rd.
 MEMBERS = [

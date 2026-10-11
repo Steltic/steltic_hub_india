@@ -1,4 +1,4 @@
-"""The ten variation categories, with generic variation templates -- India edition.
+"""The eleven variation categories, with generic variation templates -- India edition.
 
 Generalised from a 100-model study of one tower and re-cast for IS 800:2007 / IS 1893 (Part
 1):2016 + Amd 1/2 / IS 875 / IS 18168:2023: nothing here names a grid, a level or a member size
@@ -9,8 +9,18 @@ variations are of this kind, and they document what each category means to the u
 Owner rulings the templates respect: no foreign design basis (D3) -- no BRB, SPSW, composite
 walls or device chapters presented as a system; OMRF and OCBF are banned in Zones III-V (D4,
 Table 9 Note 1); occupancy drives I (D8); office imposed load 4.0 kN/m2 (D9).
+
+Building-aware (2026-10): a category may carry "applies_to" -- ["portal"] (single-storey sheds, warehouses and PEB
+buildings) or ["multistorey"]; categories without it apply to both. building_kind() reads the base brief, and the
+plan / prompt examples offer only the categories that apply when the user has not chosen categories himself (a user
+may still tick any category). The "peb" category is drawn from what Indian PEB engineers vary in practice: layout,
+loading basis and detailing choices that move steel between frames, purlins, bracing and foundations. Templates
+marked "(tapered frames)" need the PEB release (tapered welded members); on a frame without tapered members the design
+agent reports them as not applicable.
 """
 from __future__ import annotations
+
+import re
 
 CATEGORIES = [
     {"id": "problem", "label": "Establish the problem",
@@ -26,7 +36,49 @@ CATEGORIES = [
          ("Drift target 60 % of 0.004", "Design to a storey drift no greater than 60 % of the IS 1893 7.11.1.1 limit (0.0024 h).", "Stiffness margin for nonlinear checks"),
          ("Wind deflection H/500", "Limit the wind sway to H/500 (IS 800 Table 6 uses H/300 for elastic cladding); seismic unchanged.", "Does wind serviceability touch any member?"),
      ]},
-    {"id": "core", "label": "Braced-frame configuration",
+    {"id": "peb", "label": "Portal shed (PEB) layout and economy", "applies_to": ["portal"],
+     "blurb": "Frame spacing, span arrangement, roof slope, eave height, base fixity, taper and haunch, plate grade, restraint, bracing, end walls, cranes, roof add-ons, cladding and the IS 875 / IS 800 / IS 1893 basis choices that set the steel per square metre.",
+     "templates": [
+         ("Frame spacing 6 m", "Set the main frame spacing to 6 m (same building length; frames added).", "Lighter frames and purlins vs more frames, anchor bolts and footings"),
+         ("Frame spacing 9 m", "Set the main frame spacing to 9 m (same building length; frames removed).", "Fewer frames and footings vs heavier purlins and girts"),
+         ("Two spans with an interior column", "Split the clear span into two equal spans with one interior column line (where the use allows a column in the floor).", "Modular frame: lighter rafters vs a column line in the floor"),
+         ("Roof slope 1:20", "Change the roof slope to 1:20 (same eave height).", "Flatter roof: roof Cpe, rafter bending, drainage and ponding"),
+         ("Roof slope 1:6", "Change the roof slope to 1:6 (same eave height).", "Steeper roof: arch action, roof Cpe, taller gable"),
+         ("Eave height plus 1.5 m", "Raise the eave height by 1.5 m (racking clearance).", "What the extra clear height costs in columns and wind"),
+         ("Fixed column bases", "Fix the main frame column bases (bases and anchors designed for 1.2 Mp of the column, IS 800 12.12).", "Lighter frames and less sway vs bigger base plates, anchors and footings"),
+         ("Pinned column bases", "Pin the main frame column bases (where the base brief has fixed bases).", "Smaller footings vs heavier frames and more sway"),
+         ("Prismatic rolled frame", "Use IS 808 rolled sections for the columns and rafters (no plate fabrication), with haunches as connection details.", "The conventional-steel benchmark a PEB competes with"),
+         ("All frame plates E250", "Use IS 2062 E250 for all frame plates (E250 B where IS 800 12.11.1 applies).", "Grade lever: E350 is the PEB norm, E250 B is what an IS 800 12.11 SMRF must use"),
+         ("All frame plates E350", "Use IS 2062 E350 for all frame flanges and webs (where the lateral system's rules allow it).", "Grade lever the other way"),
+         ("Flange braces at every second purlin", "Provide inner-flange braces at every second purlin and girt only, including the knee regions.", "Fewer braces vs lateral-torsional buckling capacity near the knees"),
+         ("Purlin spacing 1.8 m", "Space the purlins and girts at about 1.8 m.", "Fewer purlins vs longer unbraced outer flange and heavier purlins"),
+         ("Angle bracing in place of rods", "Use single angles or CHS for the longitudinal X-bracing instead of round bars.", "Compression-capable bracing (required where tension-only rods are not admitted)"),
+         ("Portal bracing at a door bay", "Replace one end-bay X-brace with a portal (moment) frame to keep a door opening clear.", "Operational constraint vs bracing cost"),
+         ("Expandable end wall", "Design one end wall as a full main frame (for a future extension) instead of post-and-beam.", "Cost of future expandability"),
+         ("Post-and-beam end walls", "Design both end walls as post-and-beam bearing frames with wind columns.", "The usual economic end wall"),
+         ("Add a 5 t EOT crane", "Add a 5 t pendant-operated EOT crane on column brackets along the full length (crane data per the EOR).", "Crane premium on columns, brackets, bases and sway"),
+         ("Add a 10 t EOT crane", "Add a 10 t pendant-operated EOT crane on column brackets along the full length (crane data per the EOR).", "Crane premium"),
+         ("Mezzanine along one side", "Add a 6 m wide storage mezzanine along one long side at about half the eave height.", "Frame interaction with a floor"),
+         ("Lean-to on one side", "Add an attached lean-to along one long side, span about half the main span.", "A common add-on; wind and frame interaction"),
+         ("Dock canopy", "Add a 6 m cantilever canopy over the loading docks along one long side, at about 5.5 m clear height.", "Canopy uplift and moment into the main columns"),
+         ("Rooftop solar PV", "Add rooftop solar PV as a named roof dead load of 0.15 kN/m2 over the whole roof (owner value; the PV vendor confirms).", "Very common on Indian sheds now: rafters, purlins, seismic weight"),
+         ("Insulated sandwich roof", "Replace single-skin sheeting with insulated sandwich panels (dead load per the manufacturer, EOR value).", "Cold stores and pharma: dead load and deflection"),
+         ("Collateral load 0.25 kN/m2", "Raise the collateral (services, sprinklers, lighting) dead load to 0.25 kN/m2.", "Services loading basis"),
+         ("Brick dado wall 3 m", "Add a 230 mm brick masonry dado wall to 3 m all round (sheeting above) and use the IS 800 Table 6 column limit for masonry / brittle cladding.", "Most Indian sheds have one: sway limit and wall wind"),
+         ("Sway limit H/240", "Limit the column sway to H/240 (IS 800 Table 6, masonry / brittle cladding) instead of H/150.", "Serviceability basis"),
+         ("Rafter limit span/240", "Limit the rafter vertical deflection to span/240 (IS 800 Table 6, plastered sheeting / false ceiling).", "Serviceability basis"),
+         ("Terrain category 3", "Take terrain category 3 (IS 875-3 6.3.2: developed industrial area) instead of the briefed category.", "The most argued wind input on an industrial estate"),
+         ("No Ka or Kc reduction", "Take Ka = 1.0 and Kc = 1.0 on the frames and purlins (no IS 875-3 7.2.2 area averaging or 7.3.3.13 combination reduction).", "What the IS 875-3:2015 reductions are worth"),
+         ("Dominant opening", "Treat one long wall as having a dominant opening (large roller-shutter doors) and take Cpi per IS 875-3 7.3.2.", "Internal pressure drives uplift, purlins and anchors"),
+         ("Cyclone-belt site", "Move the site to an east-coast cyclone-belt city (k4 per IS 875-3 6.3.4).", "The coastal wind premium"),
+         ("Seismic Zone III site, IS 800 SMRF", "Move the site to Zone III: OMRF and ordinary braced frames are not permitted (IS 1893 Table 9 Note 1); design SMRF portals to IS 800 12.11 (E250 B plates, 12.11.1) and SCBF bracing.", "The D4 premium on a PEB"),
+         ("Seismic Zone III site, IS 18168 SMRF", "Move the site to Zone III and design SMRF portals with IS 18168:2023 adopted voluntarily (1.2: optional for industrial buildings): E350 allowed (5.2), Table 2 limits, doubly symmetric sections; SCBF bracing.", "Which Zone III route is cheaper"),
+         ("Prismatic welded columns (tapered frames)", "Use prismatic welded columns instead of tapered columns (rafters unchanged).", "Fabrication simplicity vs steel weight"),
+         ("Longer haunch (tapered frames)", "Extend the rafter taper to 30 % of the span from each knee.", "Knee moment shared over a longer deep zone"),
+         ("Shorter haunch (tapered frames)", "Limit the rafter taper to 10 % of the span from each knee.", "Lighter rafter vs deeper knee demand"),
+         ("Minimum web 6 mm (tapered frames)", "Use a minimum web thickness of 6 mm in the welded frame members (instead of the briefed minimum).", "Fewer slender webs and stiffeners vs plate weight"),
+     ]},
+    {"id": "core", "label": "Braced-frame configuration", "applies_to": ["multistorey"],
      "blurb": "Brace pattern, extent and placement of the braced bays; extra braced lines; vertical combinations (IS 800 12.7 / 12.8 / 12.9).",
      "templates": [
          ("Two-storey X braces", "Configure the braced bays as two-storey X bracing.", "Tier behaviour, brace tonnage"),
@@ -53,7 +105,7 @@ CATEGORIES = [
          ("OCBF (Zone II only)", "Use ordinary concentrically braced frames (IS 800 12.7, R = 4.0); if the site is in Zone III–V, stop: OCBF is not permitted (IS 1893 Table 9 Note 1).", "Zone II economy; the D4 gate"),
          ("Portal frames in the transverse direction", "Use rigid portal frames transversely and braced bays longitudinally (one R per direction).", "Industrial-building layout"),
      ]},
-    {"id": "perimeter", "label": "Perimeter frames",
+    {"id": "perimeter", "label": "Perimeter frames", "applies_to": ["multistorey"],
      "blurb": "Which faces carry moment frames, spandrel depth, column orientation and section, share of base shear.",
      "templates": [
          ("Moment frames on the short faces only", "Place moment frames on the short faces only; long faces gravity.", "Which faces earn their connections"),
@@ -66,7 +118,7 @@ CATEGORIES = [
          ("Moment frames on the middle bays only", "Keep moment connections only on the middle bays of each face; pin the corner bays.", "Fewer connections"),
          ("Moment frames sized for 25 % of VB", "In a mixed system size the moment frames for at least 25 % of the design base shear (IS 1893 7.2.7 spirit); braces carry the rest.", "Minimum moment frame"),
      ]},
-    {"id": "outriggers", "label": "Outriggers and belt trusses",
+    {"id": "outriggers", "label": "Outriggers and belt trusses", "applies_to": ["multistorey"],
      "blurb": "Outrigger and belt levels for a tall braced core.",
      "templates": [
          ("Outriggers at the roof", "Add outrigger trusses core-to-perimeter at the roof.", "Roof outrigger"),
@@ -154,10 +206,37 @@ def category(cid: str) -> dict | None:
     return next((c for c in CATEGORIES if c["id"] == cid), None)
 
 
-def offline_plan(n: int, categories: list[str] | None = None, instructions: str = "") -> list[dict]:
+def building_kind(brief: str) -> str | None:
+    """'portal' (single-storey shed / warehouse / PEB), 'multistorey', or None when the brief does not say.
+
+    Two or more storeys ('4-storey', '5levels', '8 storeys') make it multistorey; otherwise single-storey or shed
+    words (portal, PEB, pre-engineered, shed, warehouse, crane bay, big-box) make it a portal building."""
+    t = brief or ""
+    n = [int(m.group(1)) for m in re.finditer(r"(?<![\d.])(\d{1,3})[- ]?(?:storey|story|level)s?(?![a-z])", t, re.I)]
+    if n and max(n) >= 2:
+        return "multistorey"
+    if re.search(r"single[- ]stor(?:e)?y|\bportal|\bPEB\b|pre-engineered|\bshed\b|warehouse|crane[- ]bay|big-box", t, re.I):
+        return "portal"
+    if n:
+        return "portal" if max(n) == 1 else "multistorey"
+    return None
+
+
+def applies(c: dict, kind: str | None) -> bool:
+    """A category applies to a building kind when it has no 'applies_to' or lists the kind (unknown kind: all apply)."""
+    return kind is None or not c.get("applies_to") or kind in c["applies_to"]
+
+
+def _chosen(categories: list[str] | None, kind: str | None) -> list[dict]:
+    if categories:
+        return [c for c in CATEGORIES if c["id"] in categories] or CATEGORIES
+    return [c for c in CATEGORIES if applies(c, kind)] or CATEGORIES
+
+
+def offline_plan(n: int, categories: list[str] | None = None, instructions: str = "", kind: str | None = None) -> list[dict]:
     """A deterministic plan for MOCK / no-LLM use: M001 is the base, then templates round-robin
-    over the chosen categories (all ten when none are chosen)."""
-    chosen = [c for c in CATEGORIES if not categories or c["id"] in categories] or CATEGORIES
+    over the chosen categories (when none are chosen: every category that applies to the building kind)."""
+    chosen = _chosen(categories, kind)
     out = [{"id": "M001", "title": "Base design as briefed", "group": "reference",
             "change": "", "why": "Reference"}]
     pools = [list(c["templates"]) for c in chosen]
@@ -173,8 +252,8 @@ def offline_plan(n: int, categories: list[str] | None = None, instructions: str 
     return out[:max(1, n)]
 
 
-def examples_for_prompt(categories: list[str] | None = None, per: int = 4) -> str:
-    chosen = [c for c in CATEGORIES if not categories or c["id"] in categories] or CATEGORIES
+def examples_for_prompt(categories: list[str] | None = None, per: int = 4, kind: str | None = None) -> str:
+    chosen = _chosen(categories, kind)
     lines = []
     for c in chosen:
         lines.append(f"- {c['label']}: {c['blurb']}")

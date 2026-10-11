@@ -28,7 +28,7 @@ Type that on the **Batch** tab and press **Make plan**. The words are read by a 
 | you write | it means |
 |---|---|
 | `J1 to hr then nl` | HR Steel designs J1, then Nonlinear runs on J1 (its package field defaults to that design) |
-| `J1 (in1) to hr` | design J1 from HR Steel's example brief in1 = IN_Ex1 (through the tab's own example picker; in1 … in15 on HR Steel and CFS) |
+| `J1 (in1) to hr` | design J1 from HR Steel's example brief in1 = IN_Ex1 (through the tab's own example picker; in1 … in20 on HR Steel, in1 … in15 on CFS; inN = IN_ExN / IN_CFS_ExN) |
 | `J1 (brief.md) to hr` | design J1 from `brief.md` in J1's project folder |
 | `J1 to hr` | same — Admin reads `brief.md` / `brief.txt` from the project folder |
 | `J2 to cfs only` | CFS (IS 801) + IS 800 braced frames designs J2 |

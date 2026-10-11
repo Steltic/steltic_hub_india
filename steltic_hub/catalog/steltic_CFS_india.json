@@ -93,7 +93,7 @@
           "id": "examples",
           "type": "select",
           "label": "Load an example brief",
-          "help": "The 15 India briefs (IN_CFS_Ex1 … IN_CFS_Ex15): IS 800 braced frames and SMF portals with IS 801 secondary members, seismic zones II–V, cyclone-belt wind, snow, podiums and irregular plans. Edit it if you like, then run.",
+          "help": "The 15 India briefs, most common building types first (IN_CFS_Ex1 … IN_CFS_Ex15): portal sheds with IS 801 purlins and girts first, then IS 800 braced-frame buildings by storey count; seismic zones II–V, cyclone-belt wind, snow, podiums and irregular plans. Edit it if you like, then run.",
           "fills": {
             "path": "/api/example/{value}",
             "key": "brief",
@@ -106,31 +106,31 @@
             },
             {
               "value": "in1",
-              "label": "IN_CFS_Ex1 — SCBF + IS 801 studs/joists, 4 levels, New Delhi (Zone IV)"
+              "label": "IN_CFS_Ex1 — Hot-rolled SMF portal + CFS purlins/girts, Chennai (cyclone belt)"
             },
             {
               "value": "in2",
-              "label": "IN_CFS_Ex2 — Hot-rolled SMF portal + CFS purlins/girts, Chennai (cyclone belt)"
+              "label": "IN_CFS_Ex2 — Hot-rolled SMF portal + EBF longitudinal, cold storage, snow, Srinagar (Zone V)"
             },
             {
               "value": "in3",
-              "label": "IN_CFS_Ex3 — SCBF, 5 levels, Mumbai (coastal wind)"
+              "label": "IN_CFS_Ex3 — All-CFS portal + mezzanine, elastic R = 1.0, Hyderabad"
             },
             {
               "value": "in4",
-              "label": "IN_CFS_Ex4 — OCBF, 6 levels, student residence, Bengaluru (Zone II)"
+              "label": "IN_CFS_Ex4 — OCBF high-bay + 2-storey office wing, Nagpur (Zone II)"
             },
             {
               "value": "in5",
-              "label": "IN_CFS_Ex5 — All-CFS portal + mezzanine, elastic R = 1.0, Hyderabad"
+              "label": "IN_CFS_Ex5 — OCBF, 3 levels, L-plan motel, Visakhapatnam (cyclone belt)"
             },
             {
               "value": "in6",
-              "label": "IN_CFS_Ex6 — SCBF, 5 levels, L-plan, Pune"
+              "label": "IN_CFS_Ex6 — SCBF clinic, split-level site, Coimbatore (I = 1.2)"
             },
             {
               "value": "in7",
-              "label": "IN_CFS_Ex7 — SCBF, 6 levels, Z-plan hotel, Surat (cyclone belt)"
+              "label": "IN_CFS_Ex7 — SCBF + IS 801 studs/joists, 4 levels, New Delhi (Zone IV)"
             },
             {
               "value": "in8",
@@ -138,31 +138,31 @@
             },
             {
               "value": "in9",
-              "label": "IN_CFS_Ex9 — SCBF continuous through a 2-storey podium, U-plan, Noida"
+              "label": "IN_CFS_Ex9 — SCBF, 4 levels, roof step, Lucknow"
             },
             {
               "value": "in10",
-              "label": "IN_CFS_Ex10 — OCBF high-bay + 2-storey office wing, Nagpur (Zone II)"
+              "label": "IN_CFS_Ex10 — SCBF, 5 levels, Mumbai (coastal wind)"
             },
             {
               "value": "in11",
-              "label": "IN_CFS_Ex11 — OCBF, 3 levels, L-plan motel, Visakhapatnam (cyclone belt)"
+              "label": "IN_CFS_Ex11 — SCBF, 5 levels, L-plan, Pune"
             },
             {
               "value": "in12",
-              "label": "IN_CFS_Ex12 — SCBF, 8 levels, cruciform plan, Kolkata (RSA)"
+              "label": "IN_CFS_Ex12 — OCBF, 6 levels, student residence, Bengaluru (Zone II)"
             },
             {
               "value": "in13",
-              "label": "IN_CFS_Ex13 — SCBF, 4 levels, roof step, Lucknow"
+              "label": "IN_CFS_Ex13 — SCBF, 6 levels, Z-plan hotel, Surat (cyclone belt)"
             },
             {
               "value": "in14",
-              "label": "IN_CFS_Ex14 — SCBF clinic, split-level site, Coimbatore (I = 1.2)"
+              "label": "IN_CFS_Ex14 — SCBF continuous through a 2-storey podium, U-plan, Noida"
             },
             {
               "value": "in15",
-              "label": "IN_CFS_Ex15 — Hot-rolled SMF portal + EBF longitudinal, cold storage, snow, Srinagar (Zone V)"
+              "label": "IN_CFS_Ex15 — SCBF, 8 levels, cruciform plan, Kolkata (RSA)"
             }
           ]
         },
