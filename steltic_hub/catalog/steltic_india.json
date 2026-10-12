@@ -103,6 +103,26 @@
               "label": "Example briefs…"
             },
             {
+              "value": "in1",
+              "label": "IN_Ex1 — PEB factory shed, 30 m tapered portals, Bengaluru (Zone II)"
+            },
+            {
+              "value": "in2",
+              "label": "IN_Ex2 — Grade A warehouse, 4 × 24 m PEB frames, Bhiwandi (Zone III)"
+            },
+            {
+              "value": "in3",
+              "label": "IN_Ex3 — PEB crane shed, 10 t EOT crane on brackets, Nagpur (Zone II)"
+            },
+            {
+              "value": "in4",
+              "label": "IN_Ex4 — PEB warehouse, SMRF portals, Zone IV (Delhi NCR)"
+            },
+            {
+              "value": "in5",
+              "label": "IN_Ex5 — Rooftop solar check of the IN_Ex1 shed, Bengaluru"
+            },
+            {
               "value": "in6",
               "label": "IN_Ex6 — OMRF warehouse + mezzanine, Hyderabad (Zone II)"
             },

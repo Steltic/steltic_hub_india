@@ -284,6 +284,7 @@ const RULES = [
   ['no_torsional_irregularity', 'Not torsionally irregular (IS 1893 Table 5(i), Amd 2)'],
   ['wind_comfort_max_mg', 'Wind comfort ≤ (milli-g, when reported)', 'num'],
   ['representable_only', 'Representable in the Nonlinear (SNL-IN) tools (an IS 800 Section 12 frame type: SMRF, SCBF, EBF, OMRF, OCBF)'],
+  ['tapered_exempt', 'Tapered PEB frames exempt from the rule above (the nonlinear tools have no tapered section yet)'],
 ];
 function rulesEditor() {
   return el('div', { class: 'rules' }, ...RULES.map(([k, label, kind]) => {
@@ -308,7 +309,7 @@ function criteriaPills(rules) {
   if (r.require_gates_pass) out.push('analysis gates ok');
   if (r.no_torsional_irregularity) out.push('not torsionally irregular');
   if (r.wind_comfort_max_mg != null) out.push(`wind comfort ≤ ${r.wind_comfort_max_mg} mg`);
-  if (r.representable_only) out.push('representable in nonlinear tools');
+  if (r.representable_only) out.push('representable in nonlinear tools' + (r.tapered_exempt ? ' (tapered PEB frames exempt)' : ''));
   return el('div', { class: 'crit' }, ...out.map(t => el('span', { class: 'pill ok' }, t)));
 }
 function paneScore(main) {
