@@ -73,6 +73,15 @@ def section_mass_kg_m(sec: str) -> float | None:
     m = re.match(r"^(?:IS)?(WPB|NPB|HB|MB|LB|SC|MC|WB)\d+(?:\.\d+)?X(\d+(?:\.\d+)?)$", s)
     if m and "." in m.group(2):                       # HB300X88.34 -- the mass is the fraction-bearing number
         return float(m.group(2))
+    # PEB (2026-10): welded plate I  WI<d>X<bf>X<tf>X<tw>  and web-tapered  TI<d1>-<d2>X<bf>X<tf>X<tw>  (mean depth)
+    m = re.match(r"^WI(\d+(?:\.\d+)?)X(\d+(?:\.\d+)?)X(\d+(?:\.\d+)?)X(\d+(?:\.\d+)?)$", s)
+    if m:
+        d, bf, tf, tw = (float(g) for g in m.groups())
+        return STEEL_KG_PER_M_PER_MM2 * (2 * bf * tf + max(d - 2 * tf, 0) * tw)
+    m = re.match(r"^TI(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)X(\d+(?:\.\d+)?)X(\d+(?:\.\d+)?)X(\d+(?:\.\d+)?)$", s)
+    if m:
+        d1, d2, bf, tf, tw = (float(g) for g in m.groups())
+        return STEEL_KG_PER_M_PER_MM2 * (2 * bf * tf + max((d1 + d2) / 2 - 2 * tf, 0) * tw)
     m = re.match(r"^BOX(\d+(?:\.\d+)?)X(\d+(?:\.\d+)?)X(\d+(?:\.\d+)?)$", s)
     if m:
         b, h, t = float(m.group(1)), float(m.group(2)), float(m.group(3))
@@ -102,11 +111,19 @@ def schedule_metrics(files: dict) -> dict:
     if not txt:
         return {}
     rows = list(csv.DictReader(io.StringIO(txt)))
-    tonnes = 0.0; unknown = set(); kinds: dict[str, int] = {}
+    tonnes = 0.0; unknown = set(); kinds: dict[str, int] = {}; n_mass_col = 0
     for r in rows:
         kind = (r.get("member") or "").strip().lower()
         kinds[kind] = kinds.get(kind, 0) + 1
         sec = r.get("section") or ""
+        try:
+            mk = float(r["mass_kg"]) if (r.get("mass_kg") or "").strip() else None
+        except (TypeError, ValueError):
+            mk = None
+        if mk is not None:                                    # PEB (2026-10): the engine's own plate mass per row
+            tonnes += mk / 1000.0
+            n_mass_col += 1
+            continue
         try:
             L = float(r.get("length_mm") or 0) / 1000.0      # mm -> m
         except ValueError:
@@ -123,6 +140,11 @@ def schedule_metrics(files: dict) -> dict:
            "n_members": len(rows)}
     if unknown:
         out["unweighed_sections"] = sorted(unknown)[:10]
+    if n_mass_col:
+        out["steel_t_basis"] = "member_schedule mass_kg column (%d of %d rows)" % (n_mass_col, len(rows))
+    if any((r.get("peb_member") or "").strip() and (r.get("start_depth_mm") or "") != (r.get("end_depth_mm") or "")
+           for r in rows) or any(re.match(r"^TI\d", (r.get("section") or "").strip().upper()) for r in rows):
+        out["tapered"] = True                                 # PEB stepped tapered members in the schedule
     return out
 
 
@@ -313,6 +335,12 @@ def package_metrics(files: dict) -> dict:
         oks = {k: (v.get("ok") if isinstance(v, dict) else v) for k, v in gates.items()}
         out["gates_ok"] = all(x is True for x in oks.values())
         out["gates_failed"] = sorted(k for k, v in oks.items() if v is not True)
+    # PEB (2026-10): whole-building steel take-off (primary / bracing / crane / canopy / secondary / connections)
+    pt = ((cp.get("peb") or {}).get("tonnage") or {}) if isinstance(cp.get("peb"), dict) else {}
+    if isinstance(pt, dict) and isinstance(pt.get("kg_per_m2"), dict) and _num(pt["kg_per_m2"].get("total")) is not None:
+        out["peb_kg_m2"] = {k: v for k, v in pt["kg_per_m2"].items() if _num(v) is not None}
+        out["peb_steel_t"] = round(float(pt.get("total_kg") or 0.0) / 1000.0, 1)
+        out["peb_plan_area_m2"] = _num(pt.get("plan_area_m2"))
     wserv = cp.get("wind_serviceability") or {}
     if isinstance(wserv, dict) and _num(wserv.get("dc")) is not None:
         out["wind_drift_utilisation"] = round(float(wserv["dc"]), 3)
@@ -329,6 +357,11 @@ def representability(m: dict) -> dict:
     mixes) can go through the Nonlinear (SNL-IN) tools; devices, buckling-restrained braces, plate
     shear walls and composite walls cannot (and have no IS 1893 Table 9 row)."""
     text = " ".join(str(m.get(k) or "") for k in ("system", "system_cfg", "system_declared", "system_llm")).lower()
+    if m.get("tapered"):
+        # PEB (2026-10, scope section 9): the nonlinear tools have no tapered fibre section yet
+        return {"representable": False, "is_mixed": False,
+                "not_representable_because": "web-tapered (stepped) members: no tapered fibre section in the nonlinear "
+                                             "tools yet"}
     if not text.strip():
         return {"representable": None}
     bad = [w for w in NOT_REPRESENTABLE_WORDS if w.lower() in text]
@@ -350,6 +383,9 @@ def extract(files: dict) -> dict:
     m.update(package_metrics(files))
     if m.get("steel_t") is not None and m.get("floor_area_m2"):
         m["steel_kg_m2"] = round(m["steel_t"] * 1000.0 / m["floor_area_m2"], 1)
+    if m.get("peb_kg_m2"):                    # PEB: the whole-building take-off incl. purlins, girts and connections
+        m["steel_kg_m2"] = round(float(m["peb_kg_m2"]["total"]), 1)
+        m["steel_kg_m2_basis"] = "calc_package peb.tonnage (primary + bracing + crane + canopy + secondary + connections)"
     m.update(representability(m))
     m["has_report"] = "report.html" in files
     m["has_viewer"] = "viewer_3d.html" in files

@@ -91,7 +91,7 @@
           "id": "examples",
           "type": "select",
           "label": "Load an example brief",
-          "help": "The 15 India briefs (IN_Ex1 … IN_Ex15): every IS 1893 Table 9 steel system the engine covers, seismic zones II–V, wind-governed and snow cases, irregular plans. Edit it if you like, then run.",
+          "help": "The India briefs, most common building types first. IN_Ex1 … IN_Ex5 (PEB sheds with tapered welded frames, rooftop-solar check) arrive with the PEB release; offered here: IN_Ex6 … IN_Ex20 — single-storey industrial sheds and warehouses first, then braced and moment-frame buildings by height, seismic zones II–V, wind-governed and snow cases, irregular plans. Edit it if you like, then run.",
           "fills": {
             "path": "/api/example/{value}",
             "key": "brief",
@@ -104,63 +104,83 @@
             },
             {
               "value": "in1",
-              "label": "IN_Ex1 — SCBF, 5 levels, office, New Delhi (Zone IV)"
+              "label": "IN_Ex1 — PEB factory shed, 30 m tapered portals, Bengaluru (Zone II)"
             },
             {
               "value": "in2",
-              "label": "IN_Ex2 — SMF, 9 levels, office, Mumbai (Zone III)"
+              "label": "IN_Ex2 — Grade A warehouse, 4 × 24 m PEB frames, Bhiwandi (Zone III)"
             },
             {
               "value": "in3",
-              "label": "IN_Ex3 — SMF portal shed, Chennai (wind-governed, cyclone belt)"
+              "label": "IN_Ex3 — PEB crane shed, 10 t EOT crane on brackets, Nagpur (Zone II)"
             },
             {
               "value": "in4",
-              "label": "IN_Ex4 — SCBF, 8 levels, hospital, Kolkata (I = 1.5)"
+              "label": "IN_Ex4 — PEB warehouse, SMRF portals, Zone IV (Delhi NCR)"
             },
             {
               "value": "in5",
-              "label": "IN_Ex5 — OMRF warehouse + mezzanine, Hyderabad (Zone II)"
+              "label": "IN_Ex5 — Rooftop solar check of the IN_Ex1 shed, Bengaluru"
             },
             {
               "value": "in6",
-              "label": "IN_Ex6 — EBF, 8 levels, L-plan, Pune (IS 18168 links)"
+              "label": "IN_Ex6 — OMRF warehouse + mezzanine, Hyderabad (Zone II)"
             },
             {
               "value": "in7",
-              "label": "IN_Ex7 — SCBF, 10 levels, Ahmedabad"
+              "label": "IN_Ex7 — Crane bay, OMRF portals + OCBF end bays, Visakhapatnam"
             },
             {
               "value": "in8",
-              "label": "IN_Ex8 — OCBF, 4 levels, split-level, Jaipur (Zone II)"
+              "label": "IN_Ex8 — SMF portal shed, Chennai (wind-governed, cyclone belt)"
             },
             {
               "value": "in9",
-              "label": "IN_Ex9 — EBF (IS 18168: Zone V), 12 levels, T-plan, Guwahati"
+              "label": "IN_Ex9 — Gable warehouse + lean-to, snow (IS 875-4), Shimla"
             },
             {
               "value": "in10",
-              "label": "IN_Ex10 — SCBF (sole SFRS, IS 18168 1.3), 18 levels, slender, Noida (Zone IV)"
+              "label": "IN_Ex10 — SCBF big-box, flexible roof diaphragm (7.6.4), Indore"
             },
             {
               "value": "in11",
-              "label": "IN_Ex11 — SMF, 3 levels, Z-plan school, Chandigarh (I = 1.5)"
+              "label": "IN_Ex11 — OCBF, 4 levels, split-level, Jaipur (Zone II)"
             },
             {
               "value": "in12",
-              "label": "IN_Ex12 — SMF, 11 levels, open podium storey, Kochi"
+              "label": "IN_Ex12 — SMF, 3 levels, Z-plan school, Chandigarh (I = 1.5)"
             },
             {
               "value": "in13",
-              "label": "IN_Ex13 — SCBF big-box, flexible roof diaphragm (7.6.4), Indore"
+              "label": "IN_Ex13 — SCBF, 5 levels, office, New Delhi (Zone IV)"
             },
             {
               "value": "in14",
-              "label": "IN_Ex14 — Crane bay, OMRF portals + OCBF end bays, Visakhapatnam"
+              "label": "IN_Ex14 — SCBF, 8 levels, hospital, Kolkata (I = 1.5)"
             },
             {
               "value": "in15",
-              "label": "IN_Ex15 — Gable warehouse + lean-to, snow (IS 875-4), Shimla"
+              "label": "IN_Ex15 — EBF, 8 levels, L-plan, Pune (IS 18168 links)"
+            },
+            {
+              "value": "in16",
+              "label": "IN_Ex16 — SMF, 9 levels, office, Mumbai (Zone III)"
+            },
+            {
+              "value": "in17",
+              "label": "IN_Ex17 — SCBF, 10 levels, Ahmedabad"
+            },
+            {
+              "value": "in18",
+              "label": "IN_Ex18 — SMF, 11 levels, open podium storey, Kochi"
+            },
+            {
+              "value": "in19",
+              "label": "IN_Ex19 — EBF (IS 18168: Zone V), 12 levels, T-plan, Guwahati"
+            },
+            {
+              "value": "in20",
+              "label": "IN_Ex20 — SCBF (sole SFRS, IS 18168 1.3), 18 levels, slender, Noida (Zone IV)"
             }
           ]
         },

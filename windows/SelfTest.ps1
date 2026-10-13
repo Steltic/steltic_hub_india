@@ -316,7 +316,7 @@ if ($ready) {
     $me = try { Invoke-RestMethod "$($srv.url)/api/me" -TimeoutSec 10 } catch { $null }
     Check "Design variations answers /api/me" ([bool]$me) "steltic_url='$($me.steltic_url)' jobs=$($me.jobs)"
     $lib = try { Invoke-RestMethod "$($srv.url)/api/library" -TimeoutSec 10 } catch { $null }
-    Check "ten variation categories" ($lib.categories.Count -eq 10) "$($lib.categories.Count) categories, $($lib.metrics.Count) metrics"
+    Check "eleven variation categories" ($lib.categories.Count -eq 11) "$($lib.categories.Count) categories, $($lib.metrics.Count) metrics"
     try {
       $page = Invoke-WebRequest "$($srv.url)/?project=WinSelfTest" -UseBasicParsing
       Check "module page serves" ($page.StatusCode -eq 200 -and $page.Content -match 'Design variations')

@@ -67,6 +67,8 @@ DEFAULT_ELIGIBILITY = {
     "no_torsional_irregularity": True,        # IS 1893 Table 5(i): torsion ratio within the band
     "wind_comfort_max_mg": 15.0,              # only when reported
     "representable_only": True,               # an IS 800 Section 12 frame type the Nonlinear tools can model
+    "tapered_exempt": True,                   # PEB: web-tapered frames are not rejected by representable_only (the
+                                              # nonlinear tools have no tapered section yet; scope section 6.2 / 9)
 }
 
 # INR. Rates are placeholders for the study, editable on the Score tab: fabricated and erected
@@ -227,8 +229,9 @@ def eligibility(row: dict, rules: dict) -> list[str]:
     wc = m.get("wind_comfort_mg")
     if r.get("wind_comfort_max_mg") is not None and wc is not None and wc > r["wind_comfort_max_mg"]:
         why.append(f"wind comfort {wc:.0f} mg > {r['wind_comfort_max_mg']:.0f} mg")
-    if r.get("representable_only") and m.get("representable") is False:
-        why.append("not verifiable with the current nonlinear tools (" + (m.get("system") or "system") + ")")
+    if r.get("representable_only") and m.get("representable") is False and not (m.get("tapered") and r.get("tapered_exempt")):
+        why.append("not verifiable with the current nonlinear tools (" + (m.get("not_representable_because") or
+                                                                           m.get("system") or "system") + ")")
     return why
 
 

@@ -121,7 +121,7 @@ PLAN_SYSTEM = """You turn a structural engineer's instruction into a batch plan 
 {"steps": [{"project": "<name>", "module": "<module id>", "tab": "<tab id>", "fields": {...}}], "notes": ["..."]}
 Rules: steps run in the order given, one at a time. Use only the modules and tabs listed, and only their fields.
 Project names are letters, digits, _ and -. A design tab's "brief" field may be "@project" (the brief.md in the
-project folder), "@example:<id>" (an example brief such as in1 = IN_Ex1) or "@file:<name>" (a file in the project folder),
+project folder), "@example:<id>" (an example brief such as in6 = IN_Ex6) or "@file:<name>" (a file in the project folder),
 or the literal brief text if the user wrote it. Do not invent field values the user did not give; leave a field out
 to use its default. If the instruction is ambiguous say so in notes and still give your best plan."""
 

@@ -18,19 +18,33 @@ M001 is always the base brief unchanged (title 'Base design as briefed', group '
 Where a variation is likely NOT PERMITTED by IS 1893 / IS 800 / IS 18168 (Table 9 Note 1 in Zones III-V, the
 15 m gates, dynamic-analysis requirements), still include it when it answers a question, and say in 'why' that the
 design agent should confirm the clause.
+For a single-storey portal / PEB building (shed, warehouse, crane shed) the useful variations are layout,
+loading-basis and detailing choices that move steel between the frames, purlins and girts, bracing and foundations
+(frame spacing, spans, slope, eave height, base fixity, taper and haunch, plate grade, restraint, cladding, cranes,
+roof add-ons, the IS 875 wind basis); welded plate and web-tapered members of IS 2062 plates are allowed. Do not
+propose outriggers, braced cores or tower perimeter frames for such a building, nor frame-spacing or roof-slope
+studies for a multistorey one.
 Return ONLY JSON: {"variations": [{"id": "M001", "title": "...", "group": "...", "change": "...", "why": "..."}]}
 Ids are M001, M002, ... in order. 'group' is the category label the variation belongs to."""
 
 
-def plan_user(base_brief: str, n: int, mode: str, categories: list[str], instructions: str) -> str:
+KIND_TEXT = {"portal": "The base building is a single-storey portal / PEB building (shed or warehouse).\n",
+             "multistorey": "The base building is a multistorey building.\n"}
+
+
+def plan_user(base_brief: str, n: int, mode: str, categories: list[str], instructions: str,
+              kind: str | None = None) -> str:
     parts = [f"BASE BRIEF:\n{base_brief.strip()}\n", f"N = {n} variations in total (including M001).\n"]
+    if kind in KIND_TEXT:
+        parts.append(KIND_TEXT[kind])
     if mode == "categories":
         parts.append("Draw the variations ONLY from these categories, spread evenly across them:\n" + examples_for_prompt(categories))
     elif mode == "instructions":
         parts.append("The designer's instructions for the study:\n" + instructions.strip() + "\n\n"
-                     "For reference, the kinds of variation such studies use:\n" + examples_for_prompt(None, per=2))
+                     "For reference, the kinds of variation such studies use:\n" + examples_for_prompt(None, per=2, kind=kind))
     else:
-        parts.append("Choose freely across all categories to give the widest useful spread for this building:\n" + examples_for_prompt(None, per=3))
+        parts.append("Choose freely across the categories that apply to this building to give the widest useful spread:\n"
+                     + examples_for_prompt(None, per=3, kind=kind))
     parts.append("\nReturn the JSON now.")
     return "\n".join(parts)
 

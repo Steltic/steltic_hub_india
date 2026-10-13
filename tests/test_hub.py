@@ -1408,11 +1408,11 @@ def test_the_nonlinear_collect_action_takes_only_the_project_and_the_package():
     tabs = [Tab.parse(t) for t in json.loads(cat.read_text(encoding="utf-8"))["tabs"]]
     run = next(t for t in tabs if t.id == "run")
     col = next(a for a in run.actions if a.id == "collect")
-    sent = {"job": "IN_Ex1", "level": "both", "n_records": 11, "dt": 0.01, "integrator": "hht", "parallel": 2}
-    main = cli_args(run, sent, {"job": "IN_Ex1"})
+    sent = {"job": "IN_Ex13", "level": "both", "n_records": 11, "dt": 0.01, "integrator": "hht", "parallel": 2}
+    main = cli_args(run, sent, {"job": "IN_Ex13"})
     assert "--level" in main and "--n-records" in main          # the main run still wants them
     keep = [f for f in run.fields if f.id in col.fields]
-    assert cli_args(dataclasses.replace(run, run=col.run, fields=keep), sent, {"job": "IN_Ex1"}) == []
+    assert cli_args(dataclasses.replace(run, run=col.run, fields=keep), sent, {"job": "IN_Ex13"}) == []
 
 
 def test_a_run_may_require_files_another_step_writes_first():

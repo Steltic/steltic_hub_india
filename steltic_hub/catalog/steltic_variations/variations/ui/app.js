@@ -130,11 +130,11 @@ function panePlan(main) {
   instr.value = p.instructions || '';
   const catBox = el('div', { class: 'cats' });
   const instrBox = el('div', {}, el('label', { class: 'f' }, 'Instructions for the study'), instr);
-  const autoBox = el('p', { class: 'hint' }, 'The model chooses across all ten categories for the widest useful spread for this building.');
+  const autoBox = el('p', { class: 'hint' }, 'The model chooses across the categories that apply to this building (single-storey shed or multistorey, read from the brief) for the widest useful spread.');
   const choices = el('div', { class: 'choices' });
   const paintMode = () => {
     choices.replaceChildren(...[
-      ['categories', 'Pick categories', 'Choose any number of the ten categories; the model spreads the variations across them.'],
+      ['categories', 'Pick categories', 'Choose any number of the eleven categories; the model spreads the variations across them.'],
       ['instructions', 'Describe the study', 'Type what you want explored; the model turns it into a variation list.'],
       ['auto', 'Let the model decide', 'The model proposes the whole list from the brief alone.'],
     ].map(([id, t, s]) => el('div', { class: 'choice' + (mode === id ? ' on' : ''), onclick: () => { mode = id; paintMode(); } }, el('b', {}, t), el('span', {}, s))));
@@ -284,6 +284,7 @@ const RULES = [
   ['no_torsional_irregularity', 'Not torsionally irregular (IS 1893 Table 5(i), Amd 2)'],
   ['wind_comfort_max_mg', 'Wind comfort ≤ (milli-g, when reported)', 'num'],
   ['representable_only', 'Representable in the Nonlinear (SNL-IN) tools (an IS 800 Section 12 frame type: SMRF, SCBF, EBF, OMRF, OCBF)'],
+  ['tapered_exempt', 'Tapered PEB frames exempt from the rule above (the nonlinear tools have no tapered section yet)'],
 ];
 function rulesEditor() {
   return el('div', { class: 'rules' }, ...RULES.map(([k, label, kind]) => {
@@ -308,7 +309,7 @@ function criteriaPills(rules) {
   if (r.require_gates_pass) out.push('analysis gates ok');
   if (r.no_torsional_irregularity) out.push('not torsionally irregular');
   if (r.wind_comfort_max_mg != null) out.push(`wind comfort ≤ ${r.wind_comfort_max_mg} mg`);
-  if (r.representable_only) out.push('representable in nonlinear tools');
+  if (r.representable_only) out.push('representable in nonlinear tools' + (r.tapered_exempt ? ' (tapered PEB frames exempt)' : ''));
   return el('div', { class: 'crit' }, ...out.map(t => el('span', { class: 'pill ok' }, t)));
 }
 function paneScore(main) {

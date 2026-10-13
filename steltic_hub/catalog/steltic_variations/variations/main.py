@@ -379,7 +379,8 @@ async def me():
 @app.get("/api/library")
 async def get_library():
     return {"categories": [{"id": c["id"], "label": c["label"], "blurb": c["blurb"],
-                            "examples": [t[0] for t in c["templates"][:4]], "count": len(c["templates"])}
+                            "examples": [t[0] for t in c["templates"][:4]], "count": len(c["templates"]),
+                            "applies_to": c.get("applies_to") or ["portal", "multistorey"]}
                            for c in library.CATEGORIES],
             "default_equation": scoring.DEFAULT_EQUATION,
             "metrics": [{"name": n, "description": d, "unit": u} for n, d, u in scoring.METRICS],
@@ -493,20 +494,21 @@ async def make_plan(project: str, request: Request):
     if mode == "instructions" and not instructions:
         raise HTTPException(400, "type the instructions for the study")
     note, source = "", ""
+    kind = library.building_kind(base)        # 'portal' / 'multistorey' / None: which categories apply when none are chosen
     if llm.available():
         try:
-            d = llm.chat_json(prompts.PLAN_SYSTEM, prompts.plan_user(base, n, mode, cats, instructions),
+            d = llm.chat_json(prompts.PLAN_SYSTEM, prompts.plan_user(base, n, mode, cats, instructions, kind),
                               max_tokens=min(16000, 400 + 220 * n), temperature=0.4)
             plan = _validate_plan(d.get("variations"), n)
             source = f"{llm.creds().get('model')}"
             if len(plan) < n:
                 note = f"the model proposed {len(plan)} distinct variations for N = {n}"
         except Exception as e:
-            plan = library.offline_plan(n, cats if mode == "categories" else None, instructions)
+            plan = library.offline_plan(n, cats if mode == "categories" else None, instructions, kind)
             source = "library (model failed)"
             note = f"the model could not plan ({type(e).__name__}: {str(e)[:200]}); the built-in library was used instead"
     else:
-        plan = library.offline_plan(n, cats if mode == "categories" else None, instructions)
+        plan = library.offline_plan(n, cats if mode == "categories" else None, instructions, kind)
         source = "library (no LLM connection)"
         if mode == "instructions":
             note = "without an LLM connection the instructions cannot be interpreted; the built-in library was used instead"

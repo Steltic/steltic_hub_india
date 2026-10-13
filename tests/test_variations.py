@@ -4,7 +4,7 @@ The HR Steel (IS 800) client is monkeypatched: no design server, no LLM, no netw
 fixtures mirror the real steltic_india layout (design/calc_package.json with drift_table /
 seismic_calc / design_status / irregularity / gates, design/cfg_snapshot.json in N-mm,
 design/member_schedule.csv with IS 808 designations and length_mm, load_plan.json, report.html,
-STATUS.md, conversation.json) as written for the gold-standard package IN_Ex1_SCBF_5levels_Delhi.
+STATUS.md, conversation.json) as written for the gold-standard package IN_Ex13_SCBF_5levels_Delhi.
 
     python -m pytest tests/test_variations.py -q
 """
@@ -114,10 +114,11 @@ def make_package(building="B", dmax=0.00364, dc=0.90, scale=1.0, brief="4-storey
 
 
 # ---------------------------------------------------------------- library
-def test_library_has_ten_categories_and_generic_templates():
-    assert len(library.CATEGORIES) == 10
+def test_library_has_eleven_categories_and_generic_templates():
+    assert len(library.CATEGORIES) == 11
     ids = [c["id"] for c in library.CATEGORIES]
-    assert ids == ["problem", "core", "system", "perimeter", "outriggers", "geometry", "members", "bases", "seismic", "detailing"]
+    assert ids == ["problem", "peb", "core", "system", "perimeter", "outriggers", "geometry", "members", "bases", "seismic",
+                   "detailing"]
     for c in library.CATEGORIES:
         assert c["label"] and c["blurb"] and len(c["templates"]) >= 4
         for title, change, why in c["templates"]:
@@ -137,6 +138,48 @@ def test_offline_plan_base_first_then_round_robin():
     assert len({v["title"] for v in plan}) == 7
     assert len(library.offline_plan(1)) == 1
     assert len(library.offline_plan(300)) <= 1 + sum(len(c["templates"]) for c in library.CATEGORIES)
+
+
+PORTAL_BRIEF = ("IN_Ex1 — PEB factory shed: 30 m clear-span tapered welded portal frames, pinned bases, Bengaluru. "
+                "Occupancy: light engineering, I = 1.0. Clear span 30 m, 11 frames at 7.5 m, eave 10.0 m, roof 1:10.")
+TOWER_BRIEF = "IN_Ex13 — 5-storey office, special concentrically braced frame (SCBF), New Delhi. 5 storeys @ 3.6 m."
+
+
+def test_building_kind_reads_the_brief():
+    assert library.building_kind(PORTAL_BRIEF) == "portal"
+    assert library.building_kind(TOWER_BRIEF) == "multistorey"
+    assert library.building_kind("Single-storey industrial portal shed, Chennai (wind-governed)") == "portal"
+    assert library.building_kind("Multi-bay OMRF warehouse + storage mezzanine, Hyderabad") == "portal"
+    assert library.building_kind("4-storey office wing and 2-storey light-manufacturing workshop wing") == "multistorey"
+    assert library.building_kind("SCBF_18levels_slender_Noida") == "multistorey"
+    assert library.building_kind("a building") is None
+
+
+def test_categories_are_building_aware():
+    """Shed briefs are not offered outriggers / braced cores / tower perimeter frames; towers are not offered the PEB
+    category; a user's explicit choice is always honoured; an unknown kind keeps every category."""
+    peb = library.category("peb")
+    assert peb["applies_to"] == ["portal"] and len(peb["templates"]) >= 30
+    for cid in ("core", "perimeter", "outriggers"):
+        assert library.category(cid)["applies_to"] == ["multistorey"]
+    groups = {v["group"] for v in library.offline_plan(200, kind="portal")}
+    assert "Portal shed (PEB) layout and economy" in groups
+    assert not groups & {"Braced-frame configuration", "Perimeter frames", "Outriggers and belt trusses"}
+    groups = {v["group"] for v in library.offline_plan(200, kind="multistorey")}
+    assert "Portal shed (PEB) layout and economy" not in groups and "Outriggers and belt trusses" in groups
+    assert {v["group"] for v in library.offline_plan(5, ["outriggers"], kind="portal")[1:]} == {"Outriggers and belt trusses"}
+    assert len({v["group"] for v in library.offline_plan(400)}) == 1 + len(library.CATEGORIES)
+    # the PEB templates follow the corpus: Table 6 masonry limit H/240, IS 800 12.11.1 E250 B, IS 18168 optional (1.2)
+    text = " ".join(" ".join(tpl) for tpl in peb["templates"])
+    assert "H/240" in text and "H/300" not in text and "E250 B" in text and "IS 18168" in text and "1.2" in text
+
+
+def test_prompt_examples_follow_the_building_kind():
+    u = prompts.plan_user(PORTAL_BRIEF, 10, "auto", [], "", library.building_kind(PORTAL_BRIEF))
+    assert "single-storey portal / PEB building" in u and "Frame spacing 6 m" in u and "Outriggers" not in u
+    u = prompts.plan_user(TOWER_BRIEF, 10, "auto", [], "", library.building_kind(TOWER_BRIEF))
+    assert "multistorey building" in u and "Frame spacing 6 m" not in u and "Outriggers" in u
+    assert "PEB" in prompts.PLAN_SYSTEM
 
 
 # ---------------------------------------------------------------- metrics
@@ -405,6 +448,18 @@ def test_api_flow_plan_run_score_select(client):
     # drop a result
     assert client.delete(f"/api/project/{p}/variation/M005").status_code == 200
     assert client.get(f"/api/project/{p}").json()["rows"][4]["status"] == "pending"
+
+
+def test_library_api_and_auto_plan_are_building_aware(client):
+    cats = {c["id"]: c for c in client.get("/api/library").json()["categories"]}
+    assert cats["peb"]["applies_to"] == ["portal"] and cats["outriggers"]["applies_to"] == ["multistorey"]
+    assert cats["system"]["applies_to"] == ["portal", "multistorey"]
+    p = "ShedStudy"
+    client.post(f"/api/project/{p}/base", json={"brief": PORTAL_BRIEF, "source": "typed"})
+    r = client.post(f"/api/project/{p}/plan", json={"n": 12, "mode": "auto"})
+    assert r.status_code == 200 and "library" in r.json()["plan_source"]
+    groups = {v["group"] for v in r.json()["plan"]}
+    assert "Portal shed (PEB) layout and economy" in groups and "Outriggers and belt trusses" not in groups
 
 
 def test_run_refuses_without_plan_or_creds(client):

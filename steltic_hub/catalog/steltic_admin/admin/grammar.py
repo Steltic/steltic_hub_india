@@ -7,8 +7,8 @@
 
 A clause names a project (anything that is not a known word: `J1`, `Tower_A`, `27_High_St`), one or
 more module aliases in the order they should run, and optionally where the design brief comes from --
-`(in1)` / `[in1]` / `with in1` for one of the design servers' India example briefs (IN_Ex1 … IN_Ex15 are
-in1 … in15 on both HR Steel and CFS), `(brief.md)` for a
+`(in1)` / `[in1]` / `with in1` for one of the design servers' India example briefs (inN = IN_ExN:
+in1 … in20 on HR Steel, in1 … in15 = IN_CFS_Ex1 … IN_CFS_Ex15 on CFS), `(brief.md)` for a
 file in the project folder. A clause with no project continues the previous one ("then to nl").
 Words like run / then / when all done / only / please are ignored; anything else unrecognised is
 reported as a warning rather than guessed at.
@@ -49,7 +49,7 @@ FILLER = {"run", "then", "to", "the", "a", "an", "and", "when", "all", "done", "
 CLAUSE_SPLIT = re.compile(r"(?:\s*;\s*|\s*\n+\s*|\s*\bthen\b\s*|\s*\bafter that\b\s*"
                           r"|\s*\bwhen (?:all|that|it|they)(?: is| are)? (?:done|finished|complete)\b\s*|\s*\bnext\b\s*)", re.I)
 BRIEF_PAREN = re.compile(r"[\(\[]\s*([A-Za-z0-9_.\-]+)\s*[\)\]]")
-# in1 .. in15 (the India briefs, IN_Ex1 .. IN_Ex15); the US ex<n> keys are still accepted for the engines' usa_reference briefs
+# in1 .. in20 (the India briefs, inN = IN_ExN / IN_CFS_ExN); the US ex<n> keys are still accepted for the engines' usa_reference briefs
 EXAMPLE = re.compile(r"^(?:in|in_ex|ex|example)[_-]?(\d+[a-z]?|redesign)$", re.I)
 PROJECT = re.compile(r"^[A-Za-z0-9_-]+$")
 
