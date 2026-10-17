@@ -1,4 +1,4 @@
-"""The eleven variation categories, with generic variation templates -- India edition.
+"""The twelve variation categories, with generic variation templates -- India edition.
 
 Generalised from a 100-model study of one tower and re-cast for IS 800:2007 / IS 1893 (Part
 1):2016 + Amd 1/2 / IS 875 / IS 18168:2023: nothing here names a grid, a level or a member size
@@ -17,6 +17,12 @@ may still tick any category). The "peb" category is drawn from what Indian PEB e
 loading basis and detailing choices that move steel between frames, purlins, bracing and foundations. Templates
 marked "(tapered frames)" need the PEB release (tapered welded members); on a frame without tapered members the design
 agent reports them as not applicable.
+
+PEB-LEVERS (2026-10): the "peb_levers" category -- Indian PEB practice levers -- maps one-to-one to the switches of the
+HR engine's cfg['peb_rules'] (steel_engine/peb_levers.py) and to the brief-level variants of the deterministic lever
+study (scripts/peb_lever_study.py, steel_engine/peb_autosize.py).  Each template names the switch to set, the code basis
+and whether the reading is compliant; the market-practice template is labelled NOT COMPLIANT.  PEB_LEVERS.md (next to
+this package) explains how a design engineer runs the deterministic lever study on their own PEB job.
 """
 from __future__ import annotations
 
@@ -77,6 +83,20 @@ CATEGORIES = [
          ("Longer haunch (tapered frames)", "Extend the rafter taper to 30 % of the span from each knee.", "Knee moment shared over a longer deep zone"),
          ("Shorter haunch (tapered frames)", "Limit the rafter taper to 10 % of the span from each knee.", "Lighter rafter vs deeper knee demand"),
          ("Minimum web 6 mm (tapered frames)", "Use a minimum web thickness of 6 mm in the welded frame members (instead of the briefed minimum).", "Fewer slender webs and stiffeners vs plate weight"),
+     ]},
+    {"id": "peb_levers", "label": "Indian PEB practice levers", "applies_to": ["portal"],
+     "blurb": "The code readings and vendor practices that move steel on an Indian PEB, each one a switch of cfg['peb_rules'] (HR engine, peb_levers) on top of the strict gold rulings: joint demand, LTB C1, sway limit with a brick dado, base shear keys, rod bracing, thin purlins, collateral in uplift, the seismic route, and the market-practice bundle (not compliant).",
+     "templates": [
+         ("Joints for the deliverable moment", "Set cfg['peb_rules']['joint_demand'] = 'deliverable': design the knees and apex of the ordinary moment frames for the lesser of 1.2 Mp and 1.2 x the largest factored joint moment over all strength combinations including the IS 800 12.2.3 rows (IS 800 12.10.2.1); SMRF and IS 18168 joints stay at 1.2 Mp / 1.1 Ry Mp.", "Owner ruling D-T7 designs every PEB joint for 1.2 Mp of the face section; 12.10.2.1 allows the lesser value for an OMF"),
+         ("LTB with the moment-gradient C1", "Set cfg['peb_rules']['ltb_c1'] = 'gradient': take C1 from the end moments of each restrained length (IS 800 Table 42, K = 1.0) instead of C1 = 1.0, where the moment diagram along the length is known from the stepped segments.", "Owner ruling D-T1 uses C1 = 1.0 on tapered members (conservative)"),
+         ("Sway H/150 with a dado-top check", "Set cfg['peb_rules']['sway_limit'] = 'H150_with_dado_check' and 'dado_height_mm' to the brick dado height: eave sway H/150 for the metal cladding (IS 800 Table 6 elastic cladding) and the column displacement at the dado top <= dado height / 240 (masonry).", "H/240 at the eave for a 3 m dado is what forces fixed bases on many sheds"),
+         ("Shear keys for the analysis base shear", "Set cfg['peb_rules']['base_shear_key'] = 'analysis': size the base shear transfer for the largest factored base shear over all strength combinations (12.2.3 rows included) instead of 1.2 Vd of the column (owner ruling O1); report it as a reading the O1 ruling rejected.", "1.2 Vd keys of 600-1,600 kN on pinned bases with 40-100 kN of thrust"),
+         ("Tension-rod X-bracing (Zone II OCBF only)", "Set cfg['peb_rules']['bracing'] = 'tension_rods' with round-bar braces designed in tension only; accepted on a Zone II OCBF only and reported as NOT compliant with IS 800 Section 12 (12.1 all zones; 12.7.2.1 KL/r <= 120; 12.7.2.3 tension share 30-70 %).", "Owner ruling D-T4 uses CHS / WPB braces designed for compression; rods are vendor practice"),
+         ("Thin G350 purlins and girts", "Set cfg['peb_rules']['purlins'] = 'thin_G350': design the purlins and girts as generic thin lipped zeds of IS 277 grade 350 coil (Fy 350 MPa, inside IS 801:1975 Table 2's 36 kgf/mm2 row) instead of IS 811 zeds at Fy 240 MPa; same spacing.", "IS 811 stops at 250 mm deep and the gold reads Fy 240 MPa"),
+         ("Collateral and PV in the 0.9 DL rows", "Set cfg['peb_rules']['collateral_in_uplift'] = True: count D_roof_collateral and D_roof_pv in the 0.9 DL uplift rows too (the treatment before the 2026-10 first wave; the engine now leaves them out).", "Shows what the unconservative old treatment hid on a solar-ready roof"),
+         ("Seismic route: OMRF R 3, no IS 18168", "Design the transverse frames as ordinary moment frames (R 3, IS 800 12.10) and the bracing as ordinary braced frames (R 4), without IS 18168, slender webs allowed: permitted in Zone II; in Zone III with I <= 1.0 permitted by IS 800 12.10.1.1 but not by IS 1893 Table 9 Note 1 (state the conflict); in Zones IV-V market practice, NOT compliant.", "Indian Zone III-IV PEB tenders still specify R 3 rigid portals"),
+         ("All compliant levers together", "Apply every compliant switch at once: joint_demand 'deliverable' (OMF), ltb_c1 'gradient', sway_limit 'H150_with_dado_check' where a dado exists, purlins 'thin_G350'.", "The lightest code-compliant reading of the same shed"),
+         ("Market practice bundle (NOT COMPLIANT)", "Design as many Indian PEB vendors do and label the result NOT COMPLIANT: roof imposed load 0.57 kN/m2 (MBMA) instead of IS 875-2 0.75, ordinary frames R 3 / R 4 in any zone, the sheeting taken as bracing the purlin free flange, H/150 sway with no dado check, with the deliverable joints, gradient C1, thin purlins, analysis base shear and (Zone II) rods.", "What a vendor quote is built on, so the design engineer can see the gap"),
      ]},
     {"id": "core", "label": "Braced-frame configuration", "applies_to": ["multistorey"],
      "blurb": "Brace pattern, extent and placement of the braced bays; extra braced lines; vertical combinations (IS 800 12.7 / 12.8 / 12.9).",
