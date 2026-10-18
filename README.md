@@ -9,7 +9,7 @@
 One local app over every Steltic India module: HR steel (IS 800), cold-formed steel (IS 801 / IS 811), nonlinear checks, the IS corpus, design variations and probabilistic analysis.
 
 - **Start here.** The Hub installs the design modules for you.
-- **See the output first:** 34 worked Indian designs and 19 nonlinear runs with reports and 3D models at
+- **See the output first:** 39 worked Indian designs and 24 nonlinear runs with reports and 3D models at
   [stelticai.com/india.html](https://stelticai.com/india.html).
 - **Setup video:** [YouTube](https://www.youtube.com/watch?v=lcKjj9wLcno).
 
