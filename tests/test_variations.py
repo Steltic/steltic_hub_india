@@ -114,11 +114,11 @@ def make_package(building="B", dmax=0.00364, dc=0.90, scale=1.0, brief="4-storey
 
 
 # ---------------------------------------------------------------- library
-def test_library_has_eleven_categories_and_generic_templates():
-    assert len(library.CATEGORIES) == 11
+def test_library_has_twelve_categories_and_generic_templates():
+    assert len(library.CATEGORIES) == 12
     ids = [c["id"] for c in library.CATEGORIES]
-    assert ids == ["problem", "peb", "core", "system", "perimeter", "outriggers", "geometry", "members", "bases", "seismic",
-                   "detailing"]
+    assert ids == ["problem", "peb", "peb_levers", "core", "system", "perimeter", "outriggers", "geometry", "members",
+                   "bases", "seismic", "detailing"]
     for c in library.CATEGORIES:
         assert c["label"] and c["blurb"] and len(c["templates"]) >= 4
         for title, change, why in c["templates"]:

@@ -134,7 +134,7 @@ function panePlan(main) {
   const choices = el('div', { class: 'choices' });
   const paintMode = () => {
     choices.replaceChildren(...[
-      ['categories', 'Pick categories', 'Choose any number of the eleven categories; the model spreads the variations across them.'],
+      ['categories', 'Pick categories', 'Choose any number of the twelve categories; the model spreads the variations across them.'],
       ['instructions', 'Describe the study', 'Type what you want explored; the model turns it into a variation list.'],
       ['auto', 'Let the model decide', 'The model proposes the whole list from the brief alone.'],
     ].map(([id, t, s]) => el('div', { class: 'choice' + (mode === id ? ' on' : ''), onclick: () => { mode = id; paintMode(); } }, el('b', {}, t), el('span', {}, s))));
