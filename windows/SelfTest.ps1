@@ -316,7 +316,11 @@ if ($ready) {
     $me = try { Invoke-RestMethod "$($srv.url)/api/me" -TimeoutSec 10 } catch { $null }
     Check "Design variations answers /api/me" ([bool]$me) "steltic_url='$($me.steltic_url)' jobs=$($me.jobs)"
     $lib = try { Invoke-RestMethod "$($srv.url)/api/library" -TimeoutSec 10 } catch { $null }
-    Check "eleven variation categories" ($lib.categories.Count -eq 11) "$($lib.categories.Count) categories, $($lib.metrics.Count) metrics"
+    Check "twelve variation categories" ($lib.categories.Count -eq 12) "$($lib.categories.Count) categories, $($lib.metrics.Count) metrics"
+    # PEB lever study: WinSelfTest is no job spec of HR Steel's study runner (and HR Steel may not be installed),
+    # so the tab must answer with the reason instead of offering the run
+    $peb = try { Invoke-RestMethod "$($srv.url)/api/project/WinSelfTest/peb-study" -TimeoutSec 120 } catch { $null }
+    Check "PEB lever study says why it does not apply" ($peb -and -not $peb.is_peb_job -and @($peb.reasons).Count -ge 1) "$(@($peb.reasons)[0])"
     try {
       $page = Invoke-WebRequest "$($srv.url)/?project=WinSelfTest" -UseBasicParsing
       Check "module page serves" ($page.StatusCode -eq 200 -and $page.Content -match 'Design variations')

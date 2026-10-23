@@ -2,7 +2,7 @@
   "schema": 1,
   "id": "steltic_variations",
   "name": "Design variations",
-  "blurb": "Plan N design variations of a brief, have HR Steel (IS 800) design each one, read the metrics out of the packages (steel t and kg/m², IS 1893 storey drift, D/C, design_status, VB / W, torsion), apply an eligibility rule and a score, rank them and record your selection for the other modules.",
+  "blurb": "Plan N design variations of a brief, have HR Steel (IS 800) design each one, read the metrics out of the packages (steel t and kg/m², IS 1893 storey drift, D/C, design_status, VB / W, torsion), apply an eligibility rule and a score, rank them and record your selection for the other modules. For a PEB shed it also runs HR Steel's deterministic PEB lever study (no LLM).",
   "accent": "#ffb84d",
   "order": 25,
   "homepage": "https://github.com/Steltic/steltic_hub_india",
@@ -17,9 +17,17 @@
       "requirements.txt"
     ]
   },
+  "uses": [
+    "steltic_india",
+    "steltic_CFS_india"
+  ],
   "env_vars": {
     "STELTIC_URL": "{server.steltic_india}",
-    "VARIATIONS_JOBS": "{jobs_dir}"
+    "VARIATIONS_JOBS": "{jobs_dir}",
+    "STELTIC_INDIA_DIR": "{need.steltic_india}",
+    "STELTIC_INDIA_PYTHON": "{python.steltic_india}",
+    "STELTIC_CFS_DIR": "{need.steltic_CFS_india}",
+    "INDIA_CORPUS_ROOT": "{data_dir}/grokbot"
   },
   "credentials": {
     "path": "/api/creds",
@@ -50,7 +58,7 @@
       "title": "Variations",
       "kind": "embed",
       "src": "/?project={job}",
-      "blurb": "Base brief → variation list (pick categories, describe the study, or let the model decide) → HR Steel (IS 800) designs each one → eligibility (design_status COMPLETE, every IS 800 check, IS 1893 drift, gates, torsion) + score → sortable results → record your selection. Everything is saved in this project's folder under variations/."
+      "blurb": "Base brief → variation list (pick categories, describe the study, or let the model decide) → HR Steel (IS 800) designs each one → eligibility (design_status COMPLETE, every IS 800 check, IS 1893 drift, gates, torsion) + score → sortable results → record your selection. For a PEB shed, PEB lever study runs HR Steel's deterministic lever study (auto-sizer, no LLM) in HR Steel's own checkout and environment: the strict design, each Indian PEB practice lever, the cumulative ladder and the market-practice bundle (NOT COMPLIANT), in kg/m² of plan. Everything is saved in this project's folder under variations/."
     },
     {
       "id": "files",

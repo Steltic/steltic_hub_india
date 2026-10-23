@@ -517,6 +517,101 @@ def test_python_template_names_a_needed_modules_interpreter(monkeypatch):
     assert env["DDM_PYTHON"] == str(envs.python_bin("steltic_nonlinear_india")) and env["STELTIC_ENGINE_DIR"].endswith("steel_engine")
 
 
+def test_uses_is_a_soft_need_parsed_and_validated():
+    """`uses`: modules this one runs commands in when they are installed -- {need.<id>} / {python.<id>} without
+    the hard requirement of `needs`."""
+    base = {"schema": 1, "id": "x", "name": "X", "env": {"python": "3.12", "install": []},
+            "tabs": [{"id": "files", "kind": "files"}]}
+    m = Manifest.parse(dict(base, uses=["steltic_india", "steltic_CFS_india"]), "t")
+    assert m.uses == ["steltic_india", "steltic_CFS_india"] and m.needs == []
+    assert m.to_json()["uses"] == ["steltic_india", "steltic_CFS_india"]
+    assert Manifest.parse(base, "t").uses == []
+    for bad in ("steltic_india", [1], [""]):
+        with pytest.raises(ManifestError, match="uses"):
+            Manifest.parse(dict(base, uses=bad), "t")
+    with pytest.raises(ManifestError, match="use itself"):
+        Manifest.parse(dict(base, uses=["x"]), "t")
+    v = load_catalog(config.CATALOG_DIR)["steltic_variations"]
+    assert v.uses == ["steltic_india", "steltic_CFS_india"] and v.needs == []          # its start never depends on them
+    assert v.env_vars["STELTIC_INDIA_DIR"] == "{need.steltic_india}"
+    assert v.env_vars["STELTIC_INDIA_PYTHON"] == "{python.steltic_india}"
+    assert v.env_vars["STELTIC_CFS_DIR"] == "{need.steltic_CFS_india}"
+
+
+def test_a_used_module_is_templated_only_while_installed(monkeypatch):
+    """{need.<id>} / {python.<id>} of a `uses` module exist only while it is installed; until then the variables
+    that name it stay unexpanded and are left unset, so the module server starts and says what is missing."""
+    from steltic_hub.registry import Registry
+    from steltic_hub import envs
+    reg = Registry()
+    v = load_catalog(config.CATALOG_DIR)["steltic_variations"]
+    monkeypatch.setattr(reg, "is_installed", lambda mid: False)
+    ctx = runners.base_ctx(v, "Shed", reg)
+    assert "need.steltic_india" not in ctx and "python.steltic_india" not in ctx
+    env = runners.expand(v.env_vars, ctx)
+    assert runners._unresolved(env["STELTIC_INDIA_DIR"]) and runners._unresolved(env["STELTIC_INDIA_PYTHON"])
+    assert runners._unresolved(env["STELTIC_CFS_DIR"]) and not runners._unresolved(env["VARIATIONS_JOBS"])
+    assert runners.installed_uses(v, reg) == []
+    # HR Steel installed with its environment, CFS Steel not
+    monkeypatch.setattr(reg, "is_installed", lambda mid: mid == "steltic_india")
+    monkeypatch.setattr(envs, "env_ready", lambda mid: mid == "steltic_india")
+    ctx = runners.base_ctx(v, "Shed", reg)
+    assert ctx["need.steltic_india"] == str(reg.module_root("steltic_india"))
+    assert ctx["python.steltic_india"] == str(envs.python_bin("steltic_india"))
+    assert "need.steltic_CFS_india" not in ctx
+    env = runners.expand(v.env_vars, ctx)
+    assert env["STELTIC_INDIA_DIR"] == str(reg.module_root("steltic_india"))
+    assert runners._unresolved(env["STELTIC_CFS_DIR"])
+    assert runners.installed_uses(v, reg) == ["steltic_india"]
+    # a `needs` entry keeps its own (unconditional) templates and is not repeated as a use
+    both = Manifest.parse({"schema": 1, "id": "y", "name": "Y", "env": {"python": "3.12", "install": []},
+                           "needs": ["steltic_india"], "uses": ["steltic_india"],
+                           "tabs": [{"id": "files", "kind": "files"}]}, "t")
+    assert runners.installed_uses(both, reg) == []
+
+
+def test_a_cli_run_leaves_an_absent_used_module_unset(monkeypatch):
+    from steltic_hub.registry import Registry
+    reg = Registry()
+    m = Manifest.parse({"schema": 1, "id": "u", "name": "U", "env": {"python": "3.12", "install": []},
+                        "uses": ["not_installed_anywhere"],
+                        "env_vars": {"TOOL_DIR": "{need.not_installed_anywhere}/scripts",
+                                     "TOOL_PY": "{python.not_installed_anywhere}", "DATA": "{data_dir}"},
+                        "tabs": [{"id": "go", "kind": "form", "run": {"kind": "cli", "command": ["-m", "u"]}}]}, "t")
+    ctx = runners.base_ctx(m, "J", reg)
+    env = runners._run_env(m, m.tabs[0], ctx)
+    assert "TOOL_DIR" not in env and "TOOL_PY" not in env and env["DATA"] == str(config.DATA)
+
+
+def test_the_supervisor_restarts_a_server_when_a_used_module_appears(monkeypatch):
+    """A `uses` module installed after the server started reaches it only through a fresh start's environment."""
+    import asyncio
+    from steltic_hub.registry import Registry
+    from steltic_hub.runners import ServerSupervisor, RunError
+    from steltic_hub import envs
+    sup = ServerSupervisor(Registry())
+    mid = "steltic_variations"
+    sup.ports[mid] = 8999
+    sup.deps[mid] = {}
+
+    async def no_deps(mod_id, seen):
+        return {}
+    sup._ensure_required = no_deps
+    monkeypatch.setattr(sup, "is_up", lambda m: True)
+    stopped = []
+    monkeypatch.setattr(sup, "stop", lambda m: stopped.append(m))
+    # nothing new: the running server is kept
+    sup.used[mid] = ["steltic_india"]
+    monkeypatch.setattr(runners, "installed_uses", lambda m, r: ["steltic_india"])
+    assert asyncio.run(sup.ensure(mid)) == "http://127.0.0.1:8999" and stopped == []
+    # CFS Steel installed since: restart (the start then fails here, there is no environment to start in)
+    monkeypatch.setattr(runners, "installed_uses", lambda m, r: ["steltic_india", "steltic_CFS_india"])
+    monkeypatch.setattr(envs, "env_ready", lambda m: False)
+    with pytest.raises(RunError):
+        asyncio.run(sup.ensure(mid))
+    assert stopped == [mid]
+
+
 def test_field_values_resolve_files_inside_the_project_and_keep_zero():
     from steltic_hub.registry import Registry
     m = load_catalog(config.CATALOG_DIR)["steltic_nonlinear_india"]

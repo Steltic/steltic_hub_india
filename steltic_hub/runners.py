@@ -81,6 +81,12 @@ def base_ctx(m: Manifest, job: str, registry, port: int | None = None) -> dict:
         # needed module's environment (openseespy and friends) instead of installing them twice
         if envs.env_ready(need):
             ctx[f"python.{need}"] = str(envs.python_bin(need))
+    # A module it merely USES (manifest `uses`) gets the same two templates, but only while that module is
+    # installed: otherwise they stay unexpanded and the variable that names one is left unset (_unresolved).
+    for use in installed_uses(m, registry):
+        ctx.setdefault(f"need.{use}", str(registry.module_root(use)))
+        if envs.env_ready(use):
+            ctx.setdefault(f"python.{use}", str(envs.python_bin(use)))
     # {out.<id>}: where module <id> keeps its outputs for THIS project. This is how one module's
     # inputs can default to another module's results without either knowing the other exists.
     for other in registry.known():
@@ -89,6 +95,27 @@ def base_ctx(m: Manifest, job: str, registry, port: int | None = None) -> dict:
         except Exception:
             pass
     return ctx
+
+
+def installed_uses(m: Manifest, registry) -> list[str]:
+    """The modules of `m.uses` that are installed now, in manifest order (a `needs` entry is not repeated)."""
+    out = []
+    for use in getattr(m, "uses", None) or []:
+        if use in m.needs or use in out:
+            continue
+        try:
+            if registry.is_installed(use):
+                out.append(use)
+        except Exception:
+            continue
+    return out
+
+
+def _unresolved(value: str) -> bool:
+    """An env value that still names a server, an interpreter or a checkout the hub could not resolve
+    (a `requires` server or a `uses` module that is not installed). It is left unset rather than passed
+    on as a broken path or URL, so the module sees "not available" instead of a half-templated string."""
+    return "{server." in value or "{python." in value or "{need." in value
 
 
 def field_values(tab: Tab | None, job: str, fields: dict, ctx: dict) -> dict:
@@ -255,6 +282,7 @@ class ServerSupervisor:
         self.ports: dict[str, int] = {}
         self.started: dict[str, float] = {}
         self.deps: dict[str, dict] = {}      # mod_id -> {required id: base url | None} at start time
+        self.used: dict[str, list] = {}      # mod_id -> the `uses` modules that were installed at start time
         self._locks: dict[str, asyncio.Lock] = {}
         # callable -> the one in-memory LLM connection, or None. Held by the hub, pushed to each
         # module server after it comes up, so a key is typed once and never touches disk.
@@ -368,6 +396,9 @@ class ServerSupervisor:
                 # and is available now: restart so the new run gets it.
                 was = self.deps.get(mod_id, {})
                 newly = [r for r, url in deps.items() if url and was.get(r) != url]
+                # The same for a module it `uses`: installed after this server started, its checkout and
+                # interpreter reach the server only through the environment of a fresh start.
+                newly += [u for u in installed_uses(m, self.registry) if u not in self.used.get(mod_id, [])]
                 if not newly:
                     return self.base_url(mod_id)
                 self._log_line(mod_id, f"[hub] {', '.join(newly)} available now -- restarting {self.registry.name(mod_id)} to use it")
@@ -390,14 +421,15 @@ class ServerSupervisor:
             skipped = []
             for k, v in list(expand(m.env_vars, ctx).items()) + list(expand(m.server.get("env", {}), ctx).items()):
                 v = str(v)
-                if "{server." in v or "{python." in v:
-                    skipped.append(k)            # points at a server / interpreter that is not installed: leave it unset
+                if _unresolved(v):
+                    skipped.append(k)            # a server / interpreter / checkout that is not installed: leave it unset
                     continue
                 env[k] = v
             cwd = expand(m.server.get("cwd", "{module_dir}"), ctx)
             if not pathlib.Path(cwd).is_dir():
                 raise RunError(f"{self.registry.name(mod_id)}: working folder {cwd} does not exist -- reinstall the module")
             self.deps[mod_id] = deps
+            self.used[mod_id] = installed_uses(m, self.registry)
             logp = config.LOGS_DIR / f"{mod_id}.server.log"
             with open(logp, "ab", buffering=0) as logf:
                 logf.write(f"\n=== start {time.ctime()} :: {' '.join(cmd)} ===\n".encode())
@@ -633,8 +665,8 @@ def _run_env(m: Manifest, tab: Tab, ctx: dict, connection: dict | None = None) -
     env["PYTHONIOENCODING"] = "utf-8"
     for k, v in list(expand(m.env_vars, ctx).items()) + list(expand(tab.run.env, ctx).items()):
         v = str(v)
-        if "{server." in v or "{python." in v:
-            continue        # names a server / interpreter that is not installed: left unset, as for a server
+        if _unresolved(v):
+            continue        # names a server / interpreter / checkout that is not installed: left unset, as for a server
         env[k] = v
     if tab.run.llm and connection:
         # The same connection the hub pushes to a module server's /api/creds, for a process instead:

@@ -329,6 +329,12 @@ class Manifest:
     optional: dict = field(default_factory=dict)   # {group: {label, requirements, help, probe_import}}
     env_vars: dict = field(default_factory=dict)
     needs: list = field(default_factory=list)   # ids of modules whose checkout path we export
+    # Modules this one can run commands in WHEN they are installed -- a soft `needs`. Each installed one
+    # gets {need.<id>} (its checkout) and {python.<id>} (its interpreter) exactly as a need does; one that is
+    # not installed leaves every variable naming it unset, and the module starts and runs without it (and
+    # says so itself). Design variations runs HR Steel's deterministic PEB lever study this way, while its
+    # other work needs nothing but HR Steel's server -- so a missing CFS Steel must not refuse its start.
+    uses: list = field(default_factory=list)
     # A module that needs the user's LLM connection declares where to push it. The hub holds ONE
     # connection in memory for every module, so the key is typed once and never written to disk.
     credentials: dict = field(default_factory=dict)   # {path, method}
@@ -377,6 +383,7 @@ class Manifest:
                 post_install=env.get("post_install") or [],
                 optional=env.get("optional") or {},
                 env_vars=d.get("env_vars") or {}, needs=d.get("needs") or [],
+                uses=d.get("uses") or [],
                 credentials=d.get("credentials") or {},
                 server=d.get("server") or {},
                 output_root=(d.get("output") or {}).get("root", "{job_dir}") or "{job_dir}",
@@ -386,6 +393,8 @@ class Manifest:
             raise ManifestError(f"{origin}: {e}")
         if not isinstance(m.install, list) or not isinstance(m.needs, list):
             raise ManifestError(f"{origin}: env.install and needs must be lists")
+        if not isinstance(m.uses, list) or any(not isinstance(u, str) or not u for u in m.uses):
+            raise ManifestError(f"{origin}: uses must be a list of module ids")
         m.tabs = [Tab.parse(t) for t in (d.get("tabs") or [])]
         if not m.tabs:
             raise ManifestError(f"{origin}: module {m.id!r} declares no tabs")
@@ -411,6 +420,8 @@ class Manifest:
                     raise ManifestError(f"{origin}: tab {t.id!r} requires optional component {g!r}, which env.optional does not declare")
         if m.id in m.needs:
             raise ManifestError(f"{origin}: module {m.id!r} cannot need itself")
+        if m.id in m.uses:
+            raise ManifestError(f"{origin}: module {m.id!r} cannot use itself")
         if m.bundled and not all(c.isalnum() or c in "_-" for c in m.bundled):
             raise ManifestError(f"{origin}: source.bundled must be a plain folder name")
         req = m.server.get("requires") if isinstance(m.server, dict) else None
@@ -434,7 +445,7 @@ class Manifest:
             "git": self.git, "branch": self.branch, "has_server": self.has_server,
             "bundled": bool(self.bundled), "private": bool(self.private),
             "requires_servers": [r for r in (self.server.get("requires") or []) if r != self.id],
-            "needs": self.needs, "wants_credentials": bool(self.credentials),
+            "needs": self.needs, "uses": self.uses, "wants_credentials": bool(self.credentials),
             "own_output_root": self.output_root != "{job_dir}",
             "optional": {k: {"label": v.get("label", k), "help": v.get("help", ""),
                              "requirements": v.get("requirements", [])}
