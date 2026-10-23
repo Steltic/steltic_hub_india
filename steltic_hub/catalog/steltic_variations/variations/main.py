@@ -7,16 +7,21 @@ hub's projects folder) and frames the UI at /?project=<name>.
 
 Runs are background threads: closing the browser tab never kills a study, and /api/project/<p>/events
 re-attaches to the live event stream from any sequence number.
+
+PEB lever study (2026-10): /api/project/<p>/peb-study runs HR Steel's deterministic lever study
+(scripts/peb_lever_study.py, no LLM) on a PEB project in HR Steel's own checkout and interpreter, which the hub
+resolves through its registry (manifest `uses`: STELTIC_INDIA_DIR / STELTIC_INDIA_PYTHON / STELTIC_CFS_DIR).
+See peb_study.py.
 """
 from __future__ import annotations
 import csv, hashlib, io, json, os, pathlib, re, shutil, threading, time
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import library, llm, metrics as mx, prompts, scoring, steltic_client as hr
+from . import library, llm, metrics as mx, peb_study as peb, prompts, scoring, steltic_client as hr
 
 HERE = pathlib.Path(__file__).resolve().parent
 UI = HERE / "ui"
@@ -588,7 +593,12 @@ async def stop_study(project: str):
 @app.get("/api/project/{project}/events")
 async def events(project: str, since: int = 0):
     """SSE of the study's events from seq > since; ends after `finished`. Re-attachable."""
-    s = study(project)
+    return _event_stream(study(project), since)
+
+
+def _event_stream(s, since: int) -> StreamingResponse:
+    """SSE of a background run's events (a Study, or a PEB lever study run) from seq > since; ends after
+    `finished`; a run that does not exist answers `finished` / idle at once."""
 
     def gen():
         if not s:
@@ -769,6 +779,144 @@ async def drop_result(project: str, vid: str):
         st["results"].pop(vid, None)
     update_state(project, fn)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------- API: PEB lever study (deterministic, no LLM)
+_PEB_START = threading.Lock()          # staging the job folder and starting the runner happen as one step
+
+
+def _peb_status(project: str) -> dict:
+    p = clean_name(project)
+    return peb.status(p, JOBS, load_state(p).get("base_brief") or "", STELTIC_URL, library.building_kind)
+
+
+@app.get("/api/project/{project}/peb-study")
+def peb_study_status(project: str):
+    """Does HR Steel's PEB lever study apply to this project (and if not, why); the runner's variants with their
+    code status; the job folder it reads; the live or last run; the rows done so far; the output files."""
+    return _peb_status(project)
+
+
+@app.post("/api/project/{project}/peb-study/run")
+def peb_study_run(project: str, body: dict = Body(default={})):
+    """Run the lever study on this project: body {variants: [runner variant names], max_runs, resume, ladder,
+    stop_after_min} -- ladder and stop_after_min only where the runner offers --ladder / --stop-after-min."""
+    project = clean_name(project)
+    with _PEB_START:
+        run = peb.current()
+        if run and not run.finished:
+            raise HTTPException(409, "the PEB lever study of this project is already running" if run.project == project
+                                else f"a PEB lever study is already running for {run.project}: one at a time on this PC "
+                                     "(every full run is a whole analysis of a shed) -- stop it or let it finish first")
+        s = _peb_status(project)
+        if not s["is_peb_job"] or not s["ready"]:
+            raise HTTPException(400, " ".join(s["reasons"]) or "the lever study does not apply to this project")
+        cli = s["cli"]
+        ladder = str(body.get("ladder") or "full")
+        if ladder not in cli["ladders"]:
+            raise HTTPException(400, f"the study runner offers --ladder {' / '.join(cli['ladders'])}, not {ladder!r}"
+                                if "--ladder" in cli["flags"] else "this study runner has no --ladder switch (full ladder only)")
+        raw = body.get("stop_after_min")
+        try:
+            stop_after = 0.0 if raw in (None, "") else float(raw)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "the time budget must be a number of minutes")
+        if stop_after < 0 or (stop_after > 0 and not cli.get("stop_after_min")):
+            raise HTTPException(400, "the time budget must be 0 (none) or more minutes" if stop_after < 0
+                                else "this study runner has no --stop-after-min switch")
+        variants = s["job"]["variants_by_ladder"][ladder]
+        chosen = body.get("variants") or []
+        if not isinstance(chosen, list) or any(not isinstance(c, str) for c in chosen):
+            raise HTTPException(400, "variants must be a list of the study runner's variant names")
+        try:
+            selection = peb.expand_selection(variants, chosen)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        raw = body.get("max_runs")
+        try:
+            max_runs = peb.MAX_RUNS_DEFAULT if raw in (None, "") else int(raw)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "full runs per variant must be a whole number")
+        if not 1 <= max_runs <= peb.MAX_RUNS_CAP:
+            raise HTTPException(400, f"full runs per variant must be between 1 and {peb.MAX_RUNS_CAP}")
+        resume = bool(body.get("resume", True))
+        was = (s.get("study") or {}).get("ladder")
+        if resume and was and was != ladder:
+            raise HTTPException(409, f"The rows already done belong to the {was} ladder, and a resumed study cannot "
+                                     f"switch ladder. Keep the {was} ladder, or untick 'Keep the rows already done' to "
+                                     f"start the study again with the {ladder} ladder.")
+        src = s["source"]
+        base = peb.base_dir(JOBS, project)
+        if src["kind"] == "hr":
+            try:
+                data = hr.download(STELTIC_URL, project)
+            except hr.DesignError as e:
+                raise HTTPException(404, f"HR Steel has no design for this project ({e}): put the PEB job folder "
+                                         "(cfg.py, secondary/, design/) in the project folder, or design it with HR Steel first")
+            except Exception as e:
+                raise HTTPException(502, f"HR Steel unreachable: {e}")
+            try:
+                peb.stage_package(mx.unzip(data), pathlib.Path(src["dir"]))
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            except Exception as e:
+                raise HTTPException(502, f"HR Steel's package could not be unpacked: {e}")
+        sha = peb.input_hash(src["dir"])
+        prev = peb.read_record(base)
+        if resume and prev.get("input_sha") and prev["input_sha"] != sha and \
+                any(r["done"] for r in peb.study_rows(base / "work", project)):
+            raise HTTPException(409, "The job's cfg.py (or its secondary design script) has changed since the rows "
+                                     "already done were sized. Untick 'Keep the rows already done' to start the study "
+                                     "again on the current design.")
+        p = peb.paths()
+        solar = "solar_ready" in selection
+        cmd = peb.command(p, project, src, base / "work", selection, max_runs, resume, solar,
+                          ladder=ladder if "--ladder" in cli["flags"] else None, stop_after_min=stop_after)
+        record = {"project": project, "job": project, "chosen": chosen, "variants": selection, "max_runs": max_runs,
+                  "resume": resume, "solar": solar, "ladder": ladder, "stop_after_min": stop_after, "source": src,
+                  "input_sha": sha, "cmd": cmd, "cwd": p["dir"], "started_at": time.time(), "finished_at": None,
+                  "status": "running", "rc": None}
+        run = peb.StudyRun(project, cmd, p["dir"], peb.child_env(p), base, record,
+                           {v["name"]: v["label"] for v in variants}, len(peb.sized_runs(variants, selection)))
+        try:
+            peb.start(run)
+        except RuntimeError as e:
+            raise HTTPException(409, str(e))
+    return {"ok": True, "variants": selection, "expected": run.expected, "cmd": cmd}
+
+
+@app.post("/api/project/{project}/peb-study/stop")
+def peb_study_stop(project: str):
+    run = peb.current()
+    if not run or run.finished or run.project != clean_name(project):
+        return {"ok": True, "running": False}
+    run.stop()
+    return {"ok": True, "running": True}
+
+
+@app.get("/api/project/{project}/peb-study/events")
+async def peb_study_events(project: str, since: int = 0):
+    """SSE of the lever study's output lines and progress (one event per variant started); re-attachable."""
+    run = peb.current()
+    return _event_stream(run if run and run.project == clean_name(project) else None, since)
+
+
+@app.get("/api/project/{project}/peb-study/file/{name}")
+def peb_study_file(project: str, name: str):
+    """One of the study's outputs (study.html / .csv / .json, index.html, study_tables.md, study_all.json, the log)."""
+    project = clean_name(project)
+    p = peb.output_path(peb.base_dir(JOBS, project), project, name)
+    if p is None:
+        raise HTTPException(404, "no such file")
+    if not p.is_file():
+        raise HTTPException(404, f"no {name} yet: run the PEB lever study first")
+    return FileResponse(str(p), media_type=peb.media_type(name))
+
+
+@app.get("/api/peb-study/howto", response_class=PlainTextResponse)
+def peb_study_howto():
+    """PEB_LEVERS.md: how to run the lever study on your own PEB job."""
+    return (HERE.parent / "PEB_LEVERS.md").read_text(encoding="utf-8")
 
 
 @app.get("/", response_class=HTMLResponse)

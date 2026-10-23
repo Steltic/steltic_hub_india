@@ -8,6 +8,8 @@ const S = {
   log: [], es: null, lastSeq: 0, liveText: {},
   queue: new Set(), sort: { key: 'rank', dir: 'asc' }, sel: new Set(), cols: null,
   scoreText: null, rules: null, rates: null,
+  // PEB lever study (HR Steel's deterministic auto-sizer, no LLM): status, chosen variants, options, live log
+  peb: null, pebSel: null, pebOpts: null, pebLog: [], pebSeq: 0, pebEs: null, pebView: null,
 };
 const $ = (s, r = document) => r.querySelector(s);
 const enc = encodeURIComponent;
@@ -55,7 +57,8 @@ function statusPill(r) { const [t, k] = STATUS[r.status] || [r.status, '']; retu
 /* ---------------------------------------------------------------- load */
 async function load() {
   $('#projname').textContent = S.project;
-  [S.lib, S.me, S.proj] = await Promise.all([api('/api/library'), api('/api/me'), api(`/api/project/${enc(S.project)}`)]);
+  [S.lib, S.me, S.proj, S.peb] = await Promise.all([api('/api/library'), api('/api/me'), api(`/api/project/${enc(S.project)}`),
+    api(`/api/project/${enc(S.project)}/peb-study`).catch(e => ({ is_peb_job: false, reasons: [e.message], rows: [], outputs: [] }))]);
   if (S.rules === null) S.rules = { ...S.lib.default_rules, ...(S.proj.scoring.rules || {}) };
   if (S.rates === null) S.rates = { ...S.lib.default_rates, ...(S.proj.scoring.rates || {}) };
   if (S.scoreText === null) S.scoreText = S.proj.scoring.source_text || '';
@@ -64,6 +67,7 @@ async function load() {
     'drift_concentration_ratio', 'n_moment_conn', 'dc_max', 'n_open_reasons', 'T1_s', 'VB_kN', 'R']);
   if (S.step === 1 && S.proj.plan.length) S.step = S.proj.rows.some(r => r.status === 'done') ? (S.proj.scoring.scored_at ? 5 : 4) : 3;
   if (S.proj.running) attachEvents();
+  if (S.peb && S.peb.running) attachPebEvents();
   header(); render();
 }
 async function refresh() { S.proj = await api(`/api/project/${enc(S.project)}`); header(); }
@@ -87,11 +91,16 @@ function stepState(k) {
   if (k === 5) return p.selection.recorded_at ? `${p.selection.ids.length} selected` : '';
   return '';
 }
-function render() {
+function paintSteps() {
   $('#steps').replaceChildren(...STEPS.map(([k, t]) => el('div', { class: 'step' + (S.step === k ? ' on' : '') + (stepState(k) && S.step !== k ? ' done' : ''),
-    onclick: () => { S.step = k; render(); } }, el('span', { class: 'k' }, k), el('span', {}, t), stepState(k) ? el('span', { class: 'st' }, stepState(k)) : null)));
+    onclick: () => { S.step = k; render(); } }, el('span', { class: 'k' }, k), el('span', {}, t), stepState(k) ? el('span', { class: 'st' }, stepState(k)) : null)),
+    el('span', { class: 'sp' }), pebStep());
+}
+function render() {
+  paintSteps();
+  S.pebView = null;
   const main = $('#main'); main.replaceChildren();
-  ({ 1: paneBase, 2: panePlan, 3: paneRun, 4: paneScore, 5: paneResults })[S.step](main);
+  ({ 1: paneBase, 2: panePlan, 3: paneRun, 4: paneScore, 5: paneResults, peb: panePeb })[S.step](main);
   main.scrollTop = 0;
 }
 
@@ -439,6 +448,243 @@ function paneResults(main) {
     el('div', { class: 'card' }, el('h3', { style: 'margin-top:0' }, 'Your selection'),
       el('p', { class: 'hint' }, 'Tick the variations you take forward, then record them. The selection and each package are written into this project (', el('code', {}, 'variations/selected/'), ' and ', el('code', {}, 'selected_variations.json'), ') so the Nonlinear module and the other modules can pick them up with "in project ▾".'),
       selNote, el('div', { class: 'row', style: 'margin-top:8px' }, record, selInfo))));
+}
+
+/* ---------------------------------------------------------------- PEB lever study (deterministic, no LLM)
+   HR Steel's scripts/peb_lever_study.py, run by this module's server in HR Steel's own checkout and environment.
+   The variants and their code status come from the runner itself (its variants_for), never from this page. */
+const COMPLY = { compliant: ['compliant', 'ok'], reading: ['reading', 'warn'], 'not compliant': ['NOT COMPLIANT', 'bad'], 'n/a': ['n/a', 'dim'] };
+const PEB_SPECIAL = ['strict', 'compliant', 'market', 'solar_ready'];
+function complyPill(c, status) { const [t, k] = COMPLY[c] || [c || '', '']; return el('span', { class: 'pill ' + k, title: status || '' }, t); }
+async function refreshPeb() {
+  try { S.peb = await api(`/api/project/${enc(S.project)}/peb-study`); } catch (e) { /* keep the last answer */ }
+  paintSteps();
+}
+function pebState() {
+  const P = S.peb; if (!P) return '';
+  if (P.running) return P.progress ? `running ${P.progress.n}/${P.progress.of}` : 'running…';
+  if (!P.is_peb_job) return 'n/a';
+  const done = (P.rows || []).filter(r => r.done && r.kg_m2 !== null && r.kg_m2 !== undefined).length;
+  return done ? `${done} sized` : '';
+}
+function pebStep() {
+  const P = S.peb || {};
+  return el('div', { class: 'step peb' + (S.step === 'peb' ? ' on' : '') + (P.is_peb_job ? '' : ' na'),
+    title: P.is_peb_job ? 'HR Steel’s deterministic PEB lever study (auto-sizer, no LLM)' : 'PEB lever study: does not apply to this project (open to see why)',
+    onclick: () => { S.step = 'peb'; render(); } }, el('span', { class: 'k' }, '⚖'), el('span', {}, 'PEB lever study'),
+    pebState() ? el('span', { class: 'st' }, pebState()) : null);
+}
+/* the runner's selection rules (peb_study.expand_selection, which the server applies): strict always; a ladder step
+   brings the whole ladder, its first step's lever alone and 'all compliant levers'; that row alone brings the ladder up to it */
+function pebExpand(vs, chosen) {
+  const by = Object.fromEntries(vs.map(v => [v.name, v]));
+  const want = new Set(['strict', ...chosen]);
+  const ladder = vs.filter(v => v.name.startsWith('cum:') && v.applies).map(v => v.name);
+  if ([...chosen].some(n => n.startsWith('cum:'))) { ladder.forEach(n => want.add(n)); if (by.compliant && by.compliant.applies) want.add('compliant'); }
+  else if (want.has('compliant') && by.compliant && ladder.includes(by.compliant.alias)) ladder.slice(0, ladder.indexOf(by.compliant.alias) + 1).forEach(n => want.add(n));
+  for (const n of [...want]) if (n.startsWith('cum:') && by[n] && by[n].alias) want.add(by[n].alias);
+  return vs.filter(v => want.has(v.name) && v.applies);
+}
+function pebDefaultSel(P, vs) {
+  const last = (P.run && P.run.chosen) || [];
+  const ok = new Set(vs.filter(v => v.applies).map(v => v.name));
+  if (last.length && last.every(n => ok.has(n))) return new Set(last);
+  return new Set(vs.filter(v => v.applies && !v.name.startsWith('cum:') && !PEB_SPECIAL.includes(v.name)).map(v => v.name));
+}
+const LADDERS = {
+  full: ['Full ladder', 'One lever added per step, each step from the previous step’s design: the waterfall of the study.'],
+  short: ['Short ladder', 'Strict → every compliant lever together → the market bundle: for a study that would otherwise take too long.'],
+};
+function panePeb(main) {
+  const P = S.peb || { is_peb_job: false, reasons: ['status not loaded'], rows: [], outputs: [] };
+  const pane = el('div', { class: 'pane' }, el('h2', {}, 'PEB lever study'),
+    el('p', { class: 'lead' }, 'How each Indian PEB practice or code reading changes the steel of this shed, in kg/m² of plan. HR Steel’s deterministic auto-sizer (',
+      el('code', {}, 'scripts/peb_lever_study.py'), ' with ', el('code', {}, 'steel_engine/peb_autosize.py'),
+      ') re-sizes the frame plates, the purlins and girts, the end plates, knee plates and base shear keys for each variant, and every variant must pass every check the engine makes. No language model is involved: the same job and switches give the same sizes. It runs in HR Steel’s own checkout and environment; nothing is sent anywhere.'));
+  if (!P.is_peb_job) {
+    pane.append(el('div', { class: 'card', style: 'border-color:var(--warn)' }, el('h3', { style: 'margin-top:0' }, 'Does not apply to this project'),
+      el('ul', { class: 'reasons' }, ...(P.reasons || []).map(r => el('li', {}, r))),
+      el('p', { class: 'hint', style: 'margin-top:8px' }, 'How to run it on your own PEB job: ', el('a', { href: '/api/peb-study/howto', target: '_blank' }, 'PEB_LEVERS.md'), '.')));
+    if ((P.rows || []).length || (P.outputs || []).length) pane.append(pebResults(P));
+    main.append(pane); return;
+  }
+  const job = P.job, running = !!P.running, cli = P.cli || { ladders: ['full'], stop_after_min: false };
+  if (!S.pebOpts) S.pebOpts = { max_runs: (P.run && P.run.max_runs) || P.max_runs_default || 8, resume: true,
+    ladder: (P.study && P.study.ladder) || (P.run && P.run.ladder) || 'full', stop_after_min: '' };
+  if (!cli.ladders.includes(S.pebOpts.ladder)) S.pebOpts.ladder = cli.ladders[0];
+  const vs = (job.variants_by_ladder || {})[S.pebOpts.ladder] || job.variants;
+  if (!S.pebSel) S.pebSel = pebDefaultSel(P, vs);
+  const route = { OMRF: 'ordinary moment frames (OMRF)', SMRF_IS18168: 'SMRF portals to IS 18168' }[job.route] || job.route || '?';
+  pane.append(el('div', { class: 'card tight' },
+    el('div', { class: 'kv' }, el('b', {}, job.name), ` · Zone ${job.zone}, I = ${job.I} · ${route} · `, job.dado_height_mm ? `brick dado ${job.dado_height_mm} mm` : 'no brick dado', job.base ? ` · ${job.base} bases` : ''),
+    el('div', { class: 'kv' }, 'Job folder read: ', (P.source && P.source.label) || '—'),
+    el('div', { class: 'kv' }, 'Runner: ', el('code', {}, P.runner.script || '—'), ' · CFS engine (purlins, girts): ', el('code', {}, P.runner.cfs || '—'))));
+  if ((P.reasons || []).length) pane.append(el('div', { class: 'card', style: 'border-color:var(--bad)' }, el('h3', { style: 'margin-top:0' }, 'Not ready to run'),
+    el('ul', { class: 'reasons' }, ...P.reasons.map(r => el('li', {}, r)))));
+  if (P.busy_with) pane.append(el('div', { class: 'card tight', style: 'border-color:var(--warn)' }, `A lever study is running for ${P.busy_with}: one study at a time on this PC (every full run is a whole analysis of a shed).`));
+
+  // ---- the variants the runner offers for this job
+  const by = Object.fromEntries(vs.map(v => [v.name, v]));
+  const count = el('span', { class: 'hint' });
+  const runBtn = el('button', { class: 'primary' }, 'Run the PEB lever study');
+  const paintCount = () => {
+    const sel = pebExpand(vs, S.pebSel), sized = sel.filter(v => !v.alias);
+    const nc = sel.filter(v => v.compliance === 'not compliant').length;
+    count.textContent = `${sized.length} variant(s) to size (the strict baseline included; up to ${sized.length * (Number(S.pebOpts.max_runs) || 8)} full runs)` + (nc ? ` · ${nc} NOT COMPLIANT` : '');
+    // a resumed study cannot switch ladder (the runner refuses; so does the server)
+    const was = P.study && P.study.ladder, clash = !!(was && S.pebOpts.resume && was !== S.pebOpts.ladder);
+    if (ladderWarn) ladderWarn.textContent = clash ? `The rows already done belong to the ${was} ladder: untick “Keep the rows already done” to start the study again with the ${S.pebOpts.ladder} ladder.` : '';
+    runBtn.disabled = running || !P.ready || !!P.busy_with || clash;
+  };
+  const ladderWarn = el('p', { class: 'hint', style: 'color:var(--warn)' });
+  const vrow = (v, cb) => el('label', { class: 'vrow' + (v.applies ? '' : ' na') + (v.compliance === 'not compliant' ? ' nc' : '') }, cb,
+    el('div', { class: 'vt' }, el('b', {}, v.label), (v.compliance === 'reading' || v.compliance === 'not compliant') && v.status !== 'not compliant' ? el('span', { class: 'vs ' + (v.compliance === 'reading' ? 'rd' : 'nc') }, v.status) : null,
+      el('span', { class: 'vn' }, v.note || '')), complyPill(v.compliance, v.status));
+  const tick = v => {
+    if (!v.applies) return el('input', { type: 'checkbox', disabled: true });
+    return el('input', { type: 'checkbox', checked: S.pebSel.has(v.name), disabled: running, onchange: e => { e.target.checked ? S.pebSel.add(v.name) : S.pebSel.delete(v.name); paintCount(); } });
+  };
+  const order = job.variant_order || [];
+  const rank = v => (order.indexOf(v.name) + 1) || 999;
+  const levers = vs.filter(v => !v.name.startsWith('cum:') && !PEB_SPECIAL.includes(v.name)).sort((a, b) => rank(a) - rank(b));
+  const ladder = vs.filter(v => v.name.startsWith('cum:'));
+  const ladderOn = () => [...S.pebSel].some(n => n.startsWith('cum:'));
+  const ladderCb = el('input', { type: 'checkbox', checked: ladderOn(), disabled: running || !ladder.some(v => v.applies),
+    onchange: e => { ladder.filter(v => v.applies).forEach(v => e.target.checked ? S.pebSel.add(v.name) : S.pebSel.delete(v.name)); paintCount(); } });
+  const preset = (label, fn) => el('button', { class: 'small', disabled: running, onclick: () => { S.pebSel = new Set(vs.filter(v => v.applies && fn(v)).map(v => v.name)); render(); } }, label);
+  const sec = (title, hint, ...kids) => el('div', { class: 'vsec' }, el('h3', {}, title), hint ? el('p', { class: 'hint' }, hint) : null, ...kids);
+  const comp = by.compliant;
+  const ladderChoice = cli.ladders.length > 1 ? el('div', { class: 'choices' }, ...cli.ladders.map(id => {
+    const [t, s] = LADDERS[id] || [id, ''];
+    return el('div', { class: 'choice' + (S.pebOpts.ladder === id ? ' on' : ''), onclick: () => {
+      if (running || S.pebOpts.ladder === id) return;
+      S.pebOpts.ladder = id;
+      const keep = new Set(((job.variants_by_ladder || {})[id] || []).filter(v => v.applies).map(v => v.name));
+      S.pebSel = new Set([...S.pebSel].filter(n => keep.has(n)));
+      render();
+    } }, el('b', {}, t + (P.study && P.study.ladder === id ? ' (the rows already done)' : '')), el('span', {}, s));
+  })) : null;
+  pane.append(el('div', { class: 'card' },
+    el('div', { class: 'row' }, el('h3', { style: 'margin:0' }, 'Variants'), el('span', { class: 'sp' }),
+      preset('Levers alone', v => levers.includes(v)), preset('Compliant only', v => (levers.includes(v) && v.compliance === 'compliant') || v.name === 'compliant'),
+      preset('Everything', () => true), preset('Strict only', () => false)),
+    ladderChoice,
+    el('p', { class: 'hint' }, 'The variants and their status are the study runner’s own. ', complyPill('compliant'), ' compliant with the Indian Standards as written; ',
+      complyPill('reading'), ' a reading an owner ruling rejected, the old unconservative treatment, or a code conflict for the design engineer to decide; ',
+      complyPill('not compliant'), ' not compliant — shown because it is common practice, so you can see what each shortcut buys; ', complyPill('n/a'), ' does not apply to this job.'),
+    sec('Baseline', 'Always sized first when it is not done yet: every lever starts from it.',
+      ...vs.filter(v => v.name === 'strict').map(v => vrow(v, el('input', { type: 'checkbox', checked: true, disabled: true })))),
+    sec('Each lever alone', 'Re-sized from the strict design with one switch set.', ...levers.map(v => vrow(v, tick(v)))),
+    comp ? sec('All compliant levers together', ladder.length
+      ? `On the full ladder this is the ladder’s last compliant step (${(by[comp.alias] || {}).label || comp.alias || '—'}): ticking it runs the ladder up to that step.`
+      : (comp.alias ? `Only one lever is compliant here: the same design as “${(by[comp.alias] || {}).label || comp.alias}”.` : 'Every compliant lever set at once, sized from the strict design.'),
+      vrow(comp, tick(comp))) : null,
+    ladder.length ? sec('Cumulative ladder (the waterfall)', 'One lever added per step, each step from the previous step’s design: the compliant levers first, then the readings, then the not-compliant ones. Runs as a whole.',
+      el('label', { class: 'vrow' }, ladderCb, el('div', { class: 'vt' }, el('b', {}, 'Run the ladder'),
+        el('span', { class: 'vn' }, `${ladder.filter(v => v.applies).length} steps; the first copies its lever alone.`))),
+      el('div', { class: 'steps2' }, ...ladder.map(v => el('div', { class: 'vstep' + (v.applies ? '' : ' na') }, complyPill(v.compliance, v.status), el('span', {}, v.label))))) : null,
+    vs.some(v => v.name === 'market') ? sec('Market practice', ladder.length
+      ? 'Every lever above plus the market-practice loads. It starts from the last step of the ladder when the ladder is in the study, otherwise from the strict design.'
+      : 'Every lever plus the market-practice loads, sized from the all-compliant design when that is in the study, otherwise from the strict design.',
+      ...vs.filter(v => v.name === 'market').map(v => vrow(v, tick(v)))) : null,
+    vs.some(v => v.name === 'solar_ready') ? sec('Solar-ready', 'IN_Ex1 only: the published design strengthened for rooftop PV (nothing lighter than the gold).',
+      ...vs.filter(v => v.name === 'solar_ready').map(v => vrow(v, tick(v)))) : null));
+
+  // ---- run
+  const maxIn = el('input', { type: 'number', min: 1, max: P.max_runs_cap || 30, value: S.pebOpts.max_runs, disabled: running, onchange: e => { S.pebOpts.max_runs = Number(e.target.value); paintCount(); } });
+  const resumeCb = el('input', { type: 'checkbox', checked: !!S.pebOpts.resume, disabled: running, onchange: e => { S.pebOpts.resume = e.target.checked; paintCount(); } });
+  const budgetIn = cli.stop_after_min ? el('input', { type: 'number', min: 0, step: 'any', placeholder: 'no limit', value: S.pebOpts.stop_after_min, disabled: running,
+    onchange: e => { S.pebOpts.stop_after_min = e.target.value; } }) : null;
+  const stop = el('button', { class: 'danger', disabled: !running }, 'Stop');
+  runBtn.onclick = async () => {
+    runBtn.disabled = true;
+    try {
+      const body = { variants: [...S.pebSel], max_runs: Number(S.pebOpts.max_runs) || 8, resume: !!S.pebOpts.resume, ladder: S.pebOpts.ladder };
+      if (cli.stop_after_min && String(S.pebOpts.stop_after_min).trim() !== '') body.stop_after_min = Number(S.pebOpts.stop_after_min);
+      const d = await api(`/api/project/${enc(S.project)}/peb-study/run`, { method: 'POST', body });
+      S.pebLog = []; S.pebSeq = 0;
+      toast(`PEB lever study started: ${d.expected} variant(s) to size`, 'ok');
+      await refreshPeb(); attachPebEvents(); render();
+    } catch (e) { toast(e.message, 'bad'); paintCount(); }
+  };
+  stop.onclick = async () => { try { await api(`/api/project/${enc(S.project)}/peb-study/stop`, { method: 'POST' }); toast('stopping the lever study'); } catch (e) { toast(e.message, 'bad'); } };
+  const prog = el('div', { class: 'hint' }), bar = el('i', { style: 'width:0%' });
+  const logBox = el('div', { class: 'log', id: 'peblog' });
+  pane.append(el('div', { class: 'card' },
+    el('div', { class: 'row' }, el('label', { class: 'rule' }, el('span', {}, 'Full runs per variant (at most)'), maxIn),
+      budgetIn ? el('label', { class: 'rule', title: 'the runner’s --stop-after-min: the variant in hand is never cut; run again with the rows kept to continue' },
+        el('span', {}, 'Start no new variant after (minutes)'), budgetIn) : null,
+      el('label', { class: 'rule' }, resumeCb, el('span', {}, 'Keep the rows already done (untick to start the study again)'))),
+    el('div', { class: 'row', style: 'margin-top:10px' }, runBtn, stop, el('span', { class: 'sp' }), count), ladderWarn,
+    el('p', { class: 'hint', style: 'margin-top:6px' }, 'Each full run is a complete analysis and design of the shed (minutes); a whole study takes hours. One study at a time on this PC; closing this tab does not stop it — reopen it to re-attach.'),
+    el('div', { class: 'progress' }, bar), prog, logBox));
+  S.pebView = { prog, bar };
+  pane.append(pebResults(P));
+  main.append(pane);
+  paintCount(); paintPebLive(); paintPebLog();          // after the pane is in the page: the log is found by id
+}
+function paintPebLive() {
+  const v = S.pebView, P = S.peb || {}; if (!v) return;
+  const g = P.progress, r = P.run;
+  if (P.running && g) { v.bar.style.width = `${100 * Math.max(0, g.n - 1) / Math.max(1, g.of)}%`; v.prog.textContent = `variant ${g.n} of ${g.of}: ${g.label || '…'} · ${Math.round(g.elapsed_s / 60)} min elapsed`; }
+  else if (r && r.status) {
+    v.bar.style.width = r.status === 'finished' ? '100%' : v.bar.style.width;
+    const more = { interrupted: ' — the module server stopped under it; run again with “keep the rows already done” to pick it up',
+      paused: ` — ${r.note || 'time budget reached'}: run again with “keep the rows already done” to continue` }[r.status] || '';
+    v.prog.textContent = `last run: ${r.status}${r.rc !== null && r.rc !== undefined ? ' (exit code ' + r.rc + ')' : ''}${r.finished_at ? ', ' + fmt.when(r.finished_at) : ''}${more}`;
+  }
+  else v.prog.textContent = '';
+}
+function paintPebLog() {
+  const box = $('#peblog'); if (!box) return;
+  const stick = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
+  box.replaceChildren(...S.pebLog.map(l => el('div', { class: 'l ' + l.k }, l.t)));
+  if (stick) box.scrollTop = box.scrollHeight;
+}
+function pebResults(P) {
+  const rows = P.rows || [], outs = P.outputs || [];
+  const link = o => el('a', { href: `/api/project/${enc(S.project)}/peb-study/file/${enc(o.name)}`, target: '_blank', title: o.label }, o.name);
+  return el('div', { class: 'card', id: 'pebresults' },
+    el('div', { class: 'row' }, el('h3', { style: 'margin:0' }, 'Results'), el('span', { class: 'sp' }),
+      outs.some(o => o.name === 'study.html') ? el('a', { class: 'btnlink', href: `/api/project/${enc(S.project)}/peb-study/file/study.html`, target: '_blank' }, 'Open study.html') : null),
+    outs.length ? el('div', { class: 'outs' }, ...outs.map(o => el('div', {}, link(o), el('span', { class: 'hint' }, ` — ${o.label} · ${fmt.num(o.bytes / 1024, 1)} kB`)))) :
+      el('p', { class: 'hint' }, 'No outputs yet: study.html, study.csv and study.json appear here as the study writes them (after each variant).'),
+    rows.length ? el('div', { class: 'tablewrap', style: 'margin-top:10px' }, el('table', {},
+      el('thead', {}, el('tr', {}, el('th', {}, 'Variant'), el('th', {}, 'Status'), el('th', { class: 'num' }, 'kg/m²'), el('th', { class: 'num' }, 'vs strict'),
+        el('th', {}, 'Governing check / note'), el('th', { class: 'num' }, 'Full runs'))),
+      el('tbody', {}, ...rows.map(r => el('tr', { class: r.compliance === 'not compliant' ? 'nc' : (r.compliance === 'n/a' ? 'na' : '') },
+        el('td', { class: 'title' }, r.label), el('td', {}, complyPill(r.compliance, r.status), r.compliance !== 'compliant' && r.compliance !== 'n/a' ? el('div', { class: 'hint' }, r.status) : null),
+        el('td', { class: 'num' }, r.kg_m2 === null || r.kg_m2 === undefined ? '—' : r.kg_m2.toFixed(2)),
+        el('td', { class: 'num' }, r.delta_vs_strict_kg_m2 === null || r.delta_vs_strict_kg_m2 === undefined ? '' : (r.delta_vs_strict_kg_m2 > 0 ? '+' : '') + r.delta_vs_strict_kg_m2.toFixed(2)),
+        el('td', { class: 'why' + (r.error ? '' : ' ok') }, r.error || r.governing || (r.compliance === 'n/a' ? r.note : '')),
+        el('td', { class: 'num' }, r.alias_of ? `= ${r.alias_of}` : (r.n_full_runs ?? ''))))))) : null);
+}
+function attachPebEvents() {
+  if (S.pebEs) { S.pebEs.close(); S.pebEs = null; }
+  const es = new EventSource(`/api/project/${enc(S.project)}/peb-study/events?since=${S.pebSeq}`);
+  S.pebEs = es;
+  es.onmessage = async (m) => {
+    let ev; try { ev = JSON.parse(m.data); } catch (e) { return; }
+    if (ev.seq) S.pebSeq = ev.seq;
+    if (ev.type === 'finished') {
+      es.close(); S.pebEs = null;
+      if (ev.idle) return;
+      S.pebLog.push({ k: ev.status === 'finished' ? 'ok' : (ev.status === 'paused' ? 'var' : 'err'),
+        t: `■ lever study ${ev.status || 'ended'}${ev.rc !== null && ev.rc !== undefined ? ' (exit code ' + ev.rc + ')' : ''}${ev.note ? ': ' + ev.note : ''}` });
+      await refreshPeb(); if (S.step === 'peb') render();
+      return;
+    }
+    if (ev.type === 'variant') {
+      S.pebLog.push({ k: 'var', t: `▶ ${ev.n}/${ev.of} ${ev.label}${ev.resumed ? ' — done already, kept' : ''}` });
+      await refreshPeb();
+      if (S.step === 'peb') { paintPebLive(); const old = $('#pebresults'); if (old) old.replaceWith(pebResults(S.peb)); }
+    }
+    else if (ev.type === 'start') S.pebLog.push({ k: 'var', t: ev.text });
+    else if (ev.type === 'log') S.pebLog.push({ k: /Traceback|Error|run failed|NOT feasible|no passing design/.test(ev.text || '') ? 'err' : 'l', t: ev.text });
+    if (S.pebLog.length > 1500) S.pebLog.splice(0, 300);
+    paintPebLog();
+  };
+  es.onerror = () => { /* the browser retries; a finished run answers with `finished` and we close */ };
 }
 
 load().catch(e => { document.body.append(el('div', { class: 'pane', style: 'padding:30px;color:var(--bad)' }, 'The variations module could not load: ' + e.message)); });

@@ -30,8 +30,8 @@ One local app over every Steltic India module: HR steel (IS 800), cold-formed st
       |             IS corpus      <- bundled in the hub: the corpus tooling and the grounding
       |             (server)          server the design agents ask; the corpus itself you build
       |                               from your own licensed BIS PDFs (it starts empty)
-   variations    <- bundled in the hub: plans N variations, has HR Steel design each, scores and ranks
-   (server)
+   variations    <- bundled in the hub: plans N variations, has HR Steel design each, scores and ranks;
+   (server)         runs HR Steel's PEB lever study in HR Steel's own checkout and environment
       ^
    admin         <- bundled in the hub: batch plans across projects and modules through
    (server)         the hub's own /api/run, the standards conversion queue, and help
@@ -43,7 +43,7 @@ One local app over every Steltic India module: HR steel (IS 800), cold-formed st
 | `steltic_CFS_india` | CFS (IS 801) + IS 800 braced frames | [Steltic/steltic_CFS_india](https://github.com/Steltic/steltic_CFS_india) | cold-formed members (studs, tracks, joists, purlins, girts) to IS 801 / IS 811 working stress, the lateral system a hot-rolled IS 800 Section 12 braced or moment frame; 15 `IN_CFS_Ex*` briefs |
 | `steltic_nonlinear_india` | Nonlinear (SNL-IN) | [Steltic/steltic_nonlinear_india](https://github.com/Steltic/steltic_nonlinear_india) | pushover, NLRHA and the direct design method on an HR Steel package, the IS 1893 elastic spectrum at DBE and MCE, the four-analyses sheet, the Feedback loops. **IS 1893 (Part 1):2016 provides no acceptance criteria for nonlinear analysis; results are for information** — no verdict is printed |
 | `engineering_rag_india` | IS corpus (your own conversions) | bundled (`catalog/engineering_rag_india/`) | the corpus tooling (convert, index, search, validate, import) and `rag_server.py`, which answers the agents' `RAG_API_URL`. **No standard text ships with the hub**: you build the corpus from BIS PDFs you licensed yourself (see *Building the IS corpus*) |
-| `steltic_variations` | Design variations | bundled (`catalog/steltic_variations/`) | one brief → N variations, each designed by HR Steel, scored in SI / INR |
+| `steltic_variations` | Design variations | bundled (`catalog/steltic_variations/`) | one brief → N variations, each designed by HR Steel, scored in SI / INR; for a PEB shed, HR Steel's deterministic PEB lever study (no LLM) |
 | `steltic_probabilistic` | Probabilistic analysis | bundled (`catalog/steltic_probabilistic/`) | Monte Carlo of the as-built imperfections against the IS 800 design strengths |
 | `steltic_admin` | Admin | bundled (`catalog/steltic_admin/`) | batch plans, the standards conversion queue, help |
 
@@ -300,6 +300,14 @@ checkout always wins, which is how a module ships new tabs without a hub release
 ```
 
 Paste that into **Modules → Add a module** and it is installable. No hub release, no code change.
+
+`needs` is a hard dependency: the module's server and its runs are refused until every module it names is installed.
+`uses` is the soft one, for a module that only runs some of its commands in another module's checkout and
+environment: each module it names gets the same `{need.<id>}` / `{python.<id>}` templates while it is installed, an
+env var that names one that is not installed is left unset (the module then says what is missing), and a module
+server is restarted when a module it uses is installed after it started. Design variations declares
+`"uses": ["steltic_india", "steltic_CFS_india"]` to run HR Steel's PEB lever study (below) without making either a
+condition of its start.
 `source.private: true` marks a repository the hub cannot clone anonymously: the clone uses this PC's
 own git credentials (a credential manager, or a token in the URL you register), or you link a working
 copy with **Use local copy…**. No module in the India catalog needs it.
@@ -338,8 +346,8 @@ design of the active project without either module knowing about the other.
 
 Templates available in commands, bodies, env vars, stage entries and field defaults: `{job}`,
 `{job_dir}`, `{jobs_dir}`, `{module_dir}`, `{data_dir}`, `{catalog_dir}`, `{port}`,
-`{need.<module_id>}`, `{python.<module_id>}` (the interpreter of a needed module's environment,
-for a module that runs its jobs inside that environment instead of installing openseespy twice),
+`{need.<module_id>}`, `{python.<module_id>}` (the checkout and the interpreter of a needed or used module's
+environment, for a module that runs its jobs inside that environment instead of installing openseespy twice),
 `{out.<module_id>}` (that module's output folder for the active project), `{server.<module_id>}`
 (the address of another module's server, which the hub starts first — for a module server when
 `server.requires` names it, for a CLI run when its command or `run.env` uses it), `{hub_url}` (the URL
@@ -532,11 +540,12 @@ that turns one brief into a design-variation study:
 
 1. **Base brief** — paste it, or load the one HR Steel already designed for this project (read
    back from the package's `conversation.json`).
-2. **Variations** — the number, and one of three ways to define them: tick any of eleven categories
-   (establish the problem, portal shed (PEB) layout and economy, braced-frame configuration, lateral system,
-   perimeter frames, outriggers, geometry and mass, members and materials, bases, seismic design choices,
-   detailing) and the model spreads the variations across them — when no category is ticked, only the ones that
-   apply to the building are offered (the PEB category to single-storey sheds and warehouses; braced cores, perimeter
+2. **Variations** — the number, and one of three ways to define them: tick any of twelve categories
+   (establish the problem, portal shed (PEB) layout and economy, Indian PEB practice levers, braced-frame
+   configuration, lateral system, perimeter frames, outriggers, geometry and mass, members and materials, bases,
+   seismic design choices, detailing) and the model spreads the variations across them — when no category is ticked,
+   only the ones that apply to the building are offered (the two PEB categories to single-storey sheds and
+   warehouses; braced cores, perimeter
    frames and outriggers to multistorey buildings, read from the base brief); describe the study in words and the model turns it
    into a list; or let the model propose the whole list. Every variation is `title / change /
    why`, editable in place; M001 is always the base unchanged. The templates are written in IS terms
@@ -570,6 +579,24 @@ that turns one brief into a design-variation study:
 `variations/results.csv` and `results.json` hold the full table. The module talks to HR Steel
 only through its HTTP API (`server.requires: ["steltic_india"]`, `STELTIC_URL`), so it needs HR Steel
 installed but never touches its data folder.
+
+**PEB lever study** (the entry at the right of the step bar) — for a PEB shed, HR Steel's deterministic lever study
+(steltic_india `scripts/peb_lever_study.py` with the auto-sizer `steel_engine/peb_autosize.py`; no LLM): the strict
+design under the owner rulings, each Indian PEB practice lever alone (`cfg['peb_rules']`), all compliant levers
+together, the cumulative ladder, the market-practice bundle (NOT COMPLIANT) and, for IN_Ex1, solar-ready, each one
+auto-sized until every check the engine makes passes, in kg/m² of plan. The Variations server runs the study runner
+as one child process in HR Steel's own checkout and environment, which the hub resolves through its registry
+(`uses` → `STELTIC_INDIA_DIR`, `STELTIC_INDIA_PYTHON`; CFS Steel's checkout `STELTIC_CFS_DIR` for the purlins and
+girts). The variants and their code status (compliant / reading / NOT COMPLIANT / n/a) are the runner's own, read from
+its `--help` and its `variants_for`, so the tab offers exactly the switches the runner offers (the full or short
+ladder and a time budget where it has `--ladder` / `--stop-after-min`). A project that is not one of the runner's job
+specs (`scripts/peb_lever_jobs.py`), a multistorey brief, or a missing HR Steel / CFS Steel / study runner gets the
+reason instead of the button. The job folder is the project folder when it holds `cfg.py`, otherwise HR Steel's
+design of the project fetched through its API; it is only read. Progress streams one step per variant and the tab
+re-attaches when reopened; Stop ends the runner and every full run it started; one study at a time on the PC. Outputs
+(`study.html`, `study.csv`, `study.json`, `index.html`, `study_tables.md`, `study_all.json`, the run log) are listed
+with links under `<project>/variations/peb_study/work/`. `PEB_LEVERS.md` in the module explains the study and how to
+add a job spec for your own PEB job.
 
 ## Probabilistic analysis
 
