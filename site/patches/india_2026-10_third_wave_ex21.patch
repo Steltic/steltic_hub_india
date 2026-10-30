@@ -1,0 +1,28 @@
+# india.html, third wave: the page's example counts once the angle-truss MSME shed (IN_Ex21_MSME_angle_truss_shed_Hosur) is published.
+# Applied by the third-wave config only when the build publishes it (page.patches when_hr_ids): 24 -> 25 hot-rolled
+# examples (21 briefs plus the four sub-units) and 39 -> 40 worked designs with the 15 cold-formed ones. The PEB count
+# ("five PEB sheds") does not change: the MSME shed has angle trusses, not tapered portals.
+# Base: the live second-wave page; each FIND occurs once in it, before or after the nonlinear patch.
+@@@ FIND
+NLRHA and DDM. 39 worked Indian designs, including five PEB sheds
+@@@ REPLACE
+NLRHA and DDM. 40 worked Indian designs, including five PEB sheds
+@@@ END
+
+@@@ FIND
+browse the <a href="#products">39 worked Indian designs and
+@@@ REPLACE
+browse the <a href="#products">40 worked Indian designs and
+@@@ END
+
+@@@ FIND
+<h3>24 worked buildings</h3>
+@@@ REPLACE
+<h3>25 worked buildings</h3>
+@@@ END
+
+@@@ FIND
+The 20 Indian example briefs that ship with Steltic India
+@@@ REPLACE
+The 21 Indian example briefs that ship with Steltic India
+@@@ END

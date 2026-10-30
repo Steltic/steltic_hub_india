@@ -500,10 +500,17 @@ function panePeb(main) {
   const pane = el('div', { class: 'pane' }, el('h2', {}, 'PEB lever study'),
     el('p', { class: 'lead' }, 'How each Indian PEB practice or code reading changes the steel of this shed, in kg/m² of plan. HR Steel’s deterministic auto-sizer (',
       el('code', {}, 'scripts/peb_lever_study.py'), ' with ', el('code', {}, 'steel_engine/peb_autosize.py'),
-      ') re-sizes the frame plates, the purlins and girts, the end plates, knee plates and base shear keys for each variant, and every variant must pass every check the engine makes. No language model is involved: the same job and switches give the same sizes. It runs in HR Steel’s own checkout and environment; nothing is sent anywhere.'));
+      ') re-sizes the frame plates, the purlins and girts, the end plates, knee plates, base shear keys and (with the third-wave sizer) base plates and anchors for each variant, and every variant must pass every check the engine makes. No language model is involved: the same job and switches give the same sizes. It runs in HR Steel’s own checkout and environment; nothing is sent anywhere.'));
   if (!P.is_peb_job) {
-    pane.append(el('div', { class: 'card', style: 'border-color:var(--warn)' }, el('h3', { style: 'margin-top:0' }, 'Does not apply to this project'),
-      el('ul', { class: 'reasons' }, ...(P.reasons || []).map(r => el('li', {}, r))),
+    // third wave: a project with no hand-written job spec gets one inferred from its cfg.py -- HR Steel's design is read first
+    const stageBtn = P.can_stage ? el('button', { class: 'primary', style: 'margin-top:8px' }, 'Read HR Steel’s design of this project') : null;
+    if (stageBtn) stageBtn.onclick = async () => {
+      stageBtn.disabled = true;
+      try { S.peb = await api(`/api/project/${enc(S.project)}/peb-study/stage`, { method: 'POST' }); S.pebSel = null; toast('HR Steel’s design read', 'ok'); render(); }
+      catch (e) { toast(e.message, 'bad'); stageBtn.disabled = false; }
+    };
+    pane.append(el('div', { class: 'card', style: 'border-color:var(--warn)' }, el('h3', { style: 'margin-top:0' }, P.can_stage ? 'Not ready yet' : 'Does not apply to this project'),
+      el('ul', { class: 'reasons' }, ...(P.reasons || []).map(r => el('li', {}, r))), stageBtn,
       el('p', { class: 'hint', style: 'margin-top:8px' }, 'How to run it on your own PEB job: ', el('a', { href: '/api/peb-study/howto', target: '_blank' }, 'PEB_LEVERS.md'), '.')));
     if ((P.rows || []).length || (P.outputs || []).length) pane.append(pebResults(P));
     main.append(pane); return;
@@ -518,7 +525,12 @@ function panePeb(main) {
   pane.append(el('div', { class: 'card tight' },
     el('div', { class: 'kv' }, el('b', {}, job.name), ` · Zone ${job.zone}, I = ${job.I} · ${route} · `, job.dado_height_mm ? `brick dado ${job.dado_height_mm} mm` : 'no brick dado', job.base ? ` · ${job.base} bases` : ''),
     el('div', { class: 'kv' }, 'Job folder read: ', (P.source && P.source.label) || '—'),
-    el('div', { class: 'kv' }, 'Runner: ', el('code', {}, P.runner.script || '—'), ' · CFS engine (purlins, girts): ', el('code', {}, P.runner.cfs || '—'))));
+    job.spec_source ? el('div', { class: 'kv' }, 'Job spec: ', job.inferred ? 'inferred from this job’s cfg.py (no hand-written spec needed)' : 'the runner’s hand-written spec',
+      job.members && job.members.length ? ` · resized constants: ${job.members.join(', ')}` : '') : null,
+    (job.spec_notes || []).length ? el('details', { class: 'kv' }, el('summary', { class: 'hint' }, `How the spec was read (${job.spec_notes.length} note${job.spec_notes.length > 1 ? 's' : ''})`),
+      el('ul', { class: 'reasons' }, ...job.spec_notes.map(n => el('li', { class: 'hint' }, n)))) : null,
+    el('div', { class: 'kv' }, 'Runner: ', el('code', {}, P.runner.script || '—'), ' · CFS engine (purlins, girts): ', el('code', {}, P.runner.cfs || '—'),
+      cli.cfs_python && P.runner.cfs_python ? [' in its own interpreter ', el('code', {}, P.runner.cfs_python)] : '')));
   if ((P.reasons || []).length) pane.append(el('div', { class: 'card', style: 'border-color:var(--bad)' }, el('h3', { style: 'margin-top:0' }, 'Not ready to run'),
     el('ul', { class: 'reasons' }, ...P.reasons.map(r => el('li', {}, r)))));
   if (P.busy_with) pane.append(el('div', { class: 'card tight', style: 'border-color:var(--warn)' }, `A lever study is running for ${P.busy_with}: one study at a time on this PC (every full run is a whole analysis of a shed).`));
@@ -678,6 +690,12 @@ function attachPebEvents() {
       S.pebLog.push({ k: 'var', t: `▶ ${ev.n}/${ev.of} ${ev.label}${ev.resumed ? ' — done already, kept' : ''}` });
       await refreshPeb();
       if (S.step === 'peb') { paintPebLive(); const old = $('#pebresults'); if (old) old.replaceWith(pebResults(S.peb)); }
+    }
+    else if (ev.type === 'row') {
+      if (ev.error) S.pebLog.push({ k: 'err', t: `■ ${ev.label || ev.name}: ${ev.error}` });
+      else if (ev.kg_m2 !== null && ev.kg_m2 !== undefined) S.pebLog.push({ k: 'ok', t: `■ ${ev.label || ev.name}: ${Number(ev.kg_m2).toFixed(2)} kg/m²` });
+      await refreshPeb();
+      if (S.step === 'peb') { const old = $('#pebresults'); if (old) old.replaceWith(pebResults(S.peb)); }
     }
     else if (ev.type === 'start') S.pebLog.push({ k: 'var', t: ev.text });
     else if (ev.type === 'log') S.pebLog.push({ k: /Traceback|Error|run failed|NOT feasible|no passing design/.test(ev.text || '') ? 'err' : 'l', t: ev.text });

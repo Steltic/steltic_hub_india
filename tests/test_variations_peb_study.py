@@ -61,8 +61,9 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("STELTIC_INDIA_PYTHON", sys.executable)
     monkeypatch.setenv("STELTIC_CFS_DIR", str(cfs))
     monkeypatch.setenv("INDIA_CORPUS_ROOT", str(tmp_path / "grokbot"))
-    for k in ("FAKE_STUDY_SLEEP", "FAKE_STUDY_FAIL", "FAKE_OLD_RUNNER"):
+    for k in ("FAKE_STUDY_SLEEP", "FAKE_STUDY_FAIL", "FAKE_OLD_RUNNER", "FAKE_SECOND_WAVE_RUNNER", "STELTIC_CFS_PYTHON"):
         monkeypatch.delenv(k, raising=False)
+    peb._PROBE_CACHE.clear()
     yield {"jobs": jobs, "co": co, "cfs": cfs, "tmp": tmp_path}
     run = peb.current()
     if run is not None and not run.finished:
@@ -191,10 +192,18 @@ def test_status_says_why_the_study_does_not_apply(env, client, monkeypatch):
     s = client.get("/api/project/Shed/peb-study").json()
     assert "no PEB lever study" in s["reasons"][0]
     monkeypatch.setenv("STELTIC_INDIA_DIR", str(env["co"]))
-    # a project with no job spec: says which jobs the runner has and how to add one
+    # a project with no job spec and no job folder to infer one from: says which specs the runner has and what to do
+    s = client.get("/api/project/Shed/peb-study").json()
+    assert s["is_peb_job"] is False and "No hand-written job spec named Shed" in s["reasons"][0]
+    assert EX1 in s["reasons"][0] and "PEB_LEVERS.md" in s["reasons"][0] and "no job folder" in s["reasons"][0]
+    # the same with the PEB variations release's runner (no contract, no inference): add a spec by hand
+    monkeypatch.setenv("FAKE_SECOND_WAVE_RUNNER", "1")
+    peb._PROBE_CACHE.clear()
     s = client.get("/api/project/Shed/peb-study").json()
     assert s["is_peb_job"] is False and "No job spec named Shed" in s["reasons"][0] and EX1 in s["reasons"][0]
     assert "PEB_LEVERS.md" in s["reasons"][0]
+    monkeypatch.delenv("FAKE_SECOND_WAVE_RUNNER")
+    peb._PROBE_CACHE.clear()
     # a multistorey brief: not a PEB job at all
     client.post("/api/project/Tower/base", json={"brief": "8-storey office, SMRF, 3 bays x 4 bays, Zone IV"})
     s = client.get("/api/project/Tower/peb-study").json()
@@ -453,6 +462,147 @@ def test_bad_requests_are_refused(env, client):
 
 
 # ---------------------------------------------------------------- the tab
+# ---------------------------------------------------------------- third wave (P11): the runner's contract
+MY = "MY_PEB_SHED"
+MY_SPEC = {"job": MY, "dado_height_mm": 3000.0, "base": "fixed", "members": {"COL": {"group": "column"}},
+           "seismic": {"zone": "III", "I": 1.0, "R_consts": {"R_Y": "y", "R_X": "x"}, "route": "SMRF_IS18168"}}
+
+
+def _my_job_folder(d: pathlib.Path, spec=True):
+    """An engineer's own PEB job (no hand-written spec in the runner): the fake runner 'infers' its spec from a
+    marker line of its cfg.py (the real runner builds the job's model)."""
+    _job_folder(d)
+    (d / "cfg.py").write_text(('# FAKE_PEB_SPEC %s\n' % json.dumps(MY_SPEC) if spec else "") + 'COL = "WI600X250X14X8"\n')
+
+
+def test_probe_reads_the_runners_contract(env):
+    """A third-wave runner states its switches and the job's variants in --list-variants --json: no --help parsing,
+    no import of the runner."""
+    pr = peb.probe(peb.paths(), EX1)
+    assert pr["contract"] is True and pr["cli"]["contract"] == 1
+    assert pr["cli"]["cfs_python"] and pr["cli"]["progress_json"] and pr["cli"]["spec_from_cfg"]
+    assert pr["cli"]["progress_prefix"] == "@@peb-study " and pr["cli"]["ladders"] == ["full", "short"]
+    assert {"--ladder", "--stop-after-min", "--cfs-python", "--progress-json"} <= set(pr["cli"]["flags"])
+    job = pr["job"]
+    assert job["spec_source"].startswith("job spec") and job["inferred"] is False and job["solar"] is True
+    by = {v["name"]: v for v in job["variants"]}
+    assert by["rods"]["compliance"] == "not compliant" and by["omrf_r3"]["applies"] is False
+    # the same answer as the older way of reading the runner (its --help and an import), variant for variant
+    os.environ["FAKE_SECOND_WAVE_RUNNER"] = "1"
+    try:
+        peb._PROBE_CACHE.clear()
+        old = peb.probe(peb.paths(), EX1)
+    finally:
+        del os.environ["FAKE_SECOND_WAVE_RUNNER"]
+        peb._PROBE_CACHE.clear()
+    assert old["contract"] is False and old["cli"]["cfs_python"] is False
+    for lad in ("full", "short"):
+        keys = ("name", "label", "status", "note", "applies", "alias", "start_from", "compliance")
+        assert [{k: v[k] for k in keys} for v in job["variants_by_ladder"][lad]] == \
+               [{k: v[k] for k in keys} for v in old["job"]["variants_by_ladder"][lad]]
+
+
+def test_an_engineers_own_peb_job_needs_no_hand_written_spec(env, client):
+    """A project with no hand-written spec: the runner infers it from the project's cfg.py, the tab says so, and the
+    study runs with the project folder as --jobs-root."""
+    _my_job_folder(env["jobs"] / MY)
+    s = client.get(f"/api/project/{MY}/peb-study").json()
+    assert s["is_peb_job"] is True and s["ready"] is True, s["reasons"]
+    job = s["job"]
+    assert job["inferred"] is True and "inferred" in job["spec_source"] and job["spec_notes"]
+    assert job["zone"] == "III" and job["route"] == "SMRF_IS18168" and job["members"] == ["COL"]
+    assert MY not in s["spec_jobs"] and EX1 in s["spec_jobs"]
+    r = client.post(f"/api/project/{MY}/peb-study/run", json={"variants": ["ltb_gradient"]})
+    assert r.status_code == 200, r.text
+    run = _wait()
+    assert run.rc == 0 and run.seen == ["strict", "ltb_gradient"]
+    argv = _last_call(env, MY)
+    assert argv[argv.index("--jobs-root") + 1] == str(env["jobs"])
+    rec = json.loads((env["jobs"] / MY / "variations" / "peb_study" / "run.json").read_text())
+    assert "inferred" in rec["spec_source"] and rec["plan"] == ["strict", "ltb_gradient"]
+
+
+def test_a_job_whose_spec_cannot_be_inferred_says_why(env, client):
+    _my_job_folder(env["jobs"] / MY, spec=False)
+    s = client.get(f"/api/project/{MY}/peb-study").json()
+    assert s["is_peb_job"] is False and s["ready"] is False
+    txt = " ".join(s["reasons"])
+    assert "none could be inferred" in txt and "no R constants" in txt and "PEB_LEVERS.md" in txt
+    assert client.post(f"/api/project/{MY}/peb-study/run", json={}).status_code == 400
+
+
+def test_run_passes_cfs_python_and_follows_the_json_progress(env, client, monkeypatch, tmp_path):
+    """CFS Steel's own interpreter goes to the runner as --cfs-python; with --progress-json the progress comes from
+    the runner's JSON lines, which stay in study.log and out of the live log."""
+    cfs_py = tmp_path / "cfs_venv" / "python"
+    cfs_py.parent.mkdir()
+    cfs_py.write_text("")
+    monkeypatch.setenv("STELTIC_CFS_PYTHON", str(cfs_py))
+    _job_folder(env["jobs"] / EX1)
+    s = client.get(f"/api/project/{EX1}/peb-study").json()
+    assert s["runner"]["cfs_python"] == str(cfs_py)
+    r = client.post(f"/api/project/{EX1}/peb-study/run", json={"variants": ["ltb_gradient", "rods"], "resume": False})
+    assert r.status_code == 200, r.text
+    run = _wait()
+    assert run.rc == 0 and run.seen == ["strict", "ltb_gradient", "rods"]
+    argv = _last_call(env)
+    assert argv[argv.index("--cfs-python") + 1] == str(cfs_py) and "--progress-json" in argv
+    evs = _events(client, EX1)
+    assert [e["name"] for e in evs if e.get("type") == "variant"] == ["strict", "ltb_gradient", "rods"]
+    assert [e["name"] for e in evs if e.get("type") == "row"] == ["strict", "ltb_gradient", "rods"]
+    assert not any("@@peb-study" in (e.get("text") or "") for e in evs)
+    log = (env["jobs"] / EX1 / "variations" / "peb_study" / "study.log").read_text()
+    assert '@@peb-study {"event": "plan"' in log or '"event": "plan"' in log
+    # a resumed run: the variants done already come as 'resumed' events
+    r = client.post(f"/api/project/{EX1}/peb-study/run", json={"variants": ["ltb_gradient", "rods"], "resume": True})
+    assert r.status_code == 200, r.text
+    run = _wait()
+    resumed = [e for e in _events(client, EX1) if e.get("type") == "variant" and e.get("resumed")]
+    assert [e["name"] for e in resumed] == ["strict", "ltb_gradient", "rods"]
+    # HR Steel's own interpreter named as CFS Steel's (one venv for both): no --cfs-python
+    monkeypatch.setenv("STELTIC_CFS_PYTHON", sys.executable)
+    r = client.post(f"/api/project/{EX1}/peb-study/run", json={"variants": [], "resume": True})
+    assert r.status_code == 200 and _wait().rc == 0
+    assert "--cfs-python" not in _last_call(env)
+
+
+def test_a_time_budget_stop_read_from_the_json_progress(env, client, monkeypatch):
+    _job_folder(env["jobs"] / EX1)
+    monkeypatch.setenv("FAKE_STUDY_SLEEP", "1.2")
+    r = client.post(f"/api/project/{EX1}/peb-study/run", json={"variants": ["ltb_gradient", "rods"],
+                                                                 "stop_after_min": 0.01, "resume": False})
+    assert r.status_code == 200, r.text
+    run = _wait()
+    assert run.rc == 0 and "time budget" in run.budget_line
+    assert client.get(f"/api/project/{EX1}/peb-study").json()["run"]["status"] == "paused"
+
+
+def test_hr_steel_design_is_read_before_the_spec_is_inferred(env, client, monkeypatch):
+    """No hand-written spec and no cfg.py in the project folder: the tab asks to read HR Steel's design first; once it
+    is staged the runner infers the spec from it."""
+    src = env["tmp"] / "hrjob_my"
+    _my_job_folder(src)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for p in sorted(src.rglob("*")):
+            if p.is_file():
+                z.write(p, f"{MY}/{p.relative_to(src).as_posix()}")
+    monkeypatch.setattr(vm, "STELTIC_URL", "http://127.0.0.1:1")
+    monkeypatch.setattr(vm.hr, "download", lambda url, b: buf.getvalue())
+    s = client.get(f"/api/project/{MY}/peb-study").json()
+    assert s["is_peb_job"] is False and s["can_stage"] is True and "read HR Steel's design" in s["reasons"][0]
+    assert client.post(f"/api/project/{MY}/peb-study/run", json={}).status_code == 400
+    s = client.post(f"/api/project/{MY}/peb-study/stage").json()
+    assert s["is_peb_job"] is True and s["ready"] is True and s["job"]["inferred"] is True
+    assert s["source"]["kind"] == "hr" and (env["jobs"] / MY / "variations" / "peb_study" / "input" / MY / "cfg.py").is_file()
+    r = client.post(f"/api/project/{MY}/peb-study/run", json={"variants": []})
+    assert r.status_code == 200, r.text
+    assert _wait().rc == 0
+    # a project folder that holds the job has nothing to fetch
+    _my_job_folder(env["jobs"] / "Other")
+    assert client.post("/api/project/Other/peb-study/stage").status_code == 400
+
+
 def test_the_tab_offers_the_action_and_labels_the_not_compliant_variants():
     js = (MOD / "variations" / "ui" / "app.js").read_text(encoding="utf-8")
     assert "Run the PEB lever study" in js and "/peb-study/run" in js and "/peb-study/events" in js
@@ -492,3 +642,27 @@ def test_probe_reads_the_real_runner(monkeypatch):
         short = {v["name"]: v for v in pr["job"]["variants_by_ladder"]["short"]}
         assert not any(n.startswith("cum:") for n in short) and short["market"]["compliance"] == "not compliant"
         assert pr["cli"]["stop_after_min"] is True
+    assert pr["contract"] is (pr["cli"].get("contract") is not None)
+
+
+GOLDS = os.environ.get("STELTIC_PEB_GOLDS", "")
+
+
+@pytest.mark.skipif(not (REAL and GOLDS and (pathlib.Path(GOLDS) / EX4 / "cfg.py").is_file()),
+                    reason="set STELTIC_INDIA_CHECKOUT and STELTIC_PEB_GOLDS (the PEB gold job folders)")
+def test_the_real_runner_infers_an_engineers_spec(monkeypatch, tmp_path):
+    """The real third-wave runner on a copy of the IN_Ex4 gold under another name (so it has no hand-written spec):
+    the spec is inferred from its cfg.py and the variants are the gold's own (the model is built once, no analysis)."""
+    monkeypatch.setenv("STELTIC_INDIA_DIR", REAL)
+    monkeypatch.setenv("STELTIC_INDIA_PYTHON", os.environ.get("STELTIC_INDIA_PYTHON_REAL") or sys.executable)
+    p = peb.paths()
+    if not peb.probe(p, EX1).get("contract"):
+        pytest.skip("this steltic_india runner has no --list-variants contract")
+    mine = tmp_path / "MY_NCR_SHED"
+    shutil.copytree(pathlib.Path(GOLDS) / EX4, mine, ignore=shutil.ignore_patterns("figs", "*.html", "model*"))
+    pr = peb.probe(p, "MY_NCR_SHED", str(tmp_path))
+    assert pr["job"] and pr["job"]["inferred"] is True, pr.get("job_error")
+    gold = peb.probe(p, EX4)["job"]
+    for lad in pr["job"]["variants_by_ladder"]:
+        assert [(v["name"], v["status"]) for v in pr["job"]["variants_by_ladder"][lad]] == \
+               [(v["name"], v["status"]) for v in gold["variants_by_ladder"][lad]]

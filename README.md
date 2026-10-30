@@ -586,17 +586,21 @@ design under the owner rulings, each Indian PEB practice lever alone (`cfg['peb_
 together, the cumulative ladder, the market-practice bundle (NOT COMPLIANT) and, for IN_Ex1, solar-ready, each one
 auto-sized until every check the engine makes passes, in kg/m² of plan. The Variations server runs the study runner
 as one child process in HR Steel's own checkout and environment, which the hub resolves through its registry
-(`uses` → `STELTIC_INDIA_DIR`, `STELTIC_INDIA_PYTHON`; CFS Steel's checkout `STELTIC_CFS_DIR` for the purlins and
-girts). The variants and their code status (compliant / reading / NOT COMPLIANT / n/a) are the runner's own, read from
-its `--help` and its `variants_for`, so the tab offers exactly the switches the runner offers (the full or short
-ladder and a time budget where it has `--ladder` / `--stop-after-min`). A project that is not one of the runner's job
-specs (`scripts/peb_lever_jobs.py`), a multistorey brief, or a missing HR Steel / CFS Steel / study runner gets the
-reason instead of the button. The job folder is the project folder when it holds `cfg.py`, otherwise HR Steel's
-design of the project fetched through its API; it is only read. Progress streams one step per variant and the tab
+(`uses` → `STELTIC_INDIA_DIR`, `STELTIC_INDIA_PYTHON`; CFS Steel's checkout `STELTIC_CFS_DIR` and interpreter
+`STELTIC_CFS_PYTHON` for the purlins and girts). The variants and their code status (compliant / reading / NOT
+COMPLIANT / n/a) are the runner's own, read from its contract (`--list-variants --json`; from a runner without it, its
+`--help` and its `variants_for`), so the tab offers exactly the switches the runner offers (the full or short ladder
+and a time budget where it has `--ladder` / `--stop-after-min`). A project that is not one of the runner's
+hand-written job specs (`scripts/peb_lever_jobs.py`) has its spec inferred by the runner from the project's own
+`cfg.py`, and the tab says so; a project whose spec cannot be inferred, a multistorey brief, or a missing HR Steel /
+CFS Steel / study runner gets the reason instead of the button. The job folder is the project folder when it holds
+`cfg.py`, otherwise HR Steel's design of the project fetched through its API (**Read HR Steel's design** fetches it
+before the spec is inferred); it is only read. A run passes `--cfs-python` (CFS Steel's own interpreter) and
+`--progress-json` when the runner offers them. Progress streams one step per variant and the tab
 re-attaches when reopened; Stop ends the runner and every full run it started; one study at a time on the PC. Outputs
 (`study.html`, `study.csv`, `study.json`, `index.html`, `study_tables.md`, `study_all.json`, the run log) are listed
 with links under `<project>/variations/peb_study/work/`. `PEB_LEVERS.md` in the module explains the study and how to
-add a job spec for your own PEB job.
+run it on your own PEB job.
 
 ## Probabilistic analysis
 
@@ -789,6 +793,9 @@ steltic_hub/
 windows/         first-run bootstrap + launcher (Steltic.bat / Steltic.ps1, Run-SelfTest.bat)
 CORPUS_FIX_LLM_INSTRUCTIONS.md   the corpus-fix instructions for an LLM agent (Building the IS corpus)
 tauri/           optional native shell
+site/            the build of the Steltic India pages of stelticai.com (not part of the hub app): one command
+                 makes the upload zip, the rollback zip and the upload instructions from the gold outputs
+                 (site/README.md)
 ```
 
 ## License

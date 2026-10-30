@@ -1,0 +1,91 @@
+# india.html, second-wave publish (2026-10-24): the patch of the first-wave live page (from patch_india2.py).
+# Base: the first-wave page as it was live on 2026-10-23. Applied to it, this gives the second-wave page that is live
+# since 2026-10-24 (byte-identical; tests/test_site_build.py checks the format, the publish reproduced it).
+# Kept as the record of that publish and as the model for the next patch.
+@@@ FIND
+most common building types first, plus four sub-units, designed end to end. All are complete except Ex&nbsp;5, a rooftop-solar capacity check that is partial on purpose.</p>
+@@@ REPLACE
+most common building types first, plus four sub-units, designed end to end. All are complete except Ex&nbsp;5, a rooftop-solar capacity check that is partial on purpose. Ex&nbsp;9, 10, 12 and 19 are capability demonstrations rather than typical Indian practice; their descriptions say what is usually built instead.</p>
+@@@ END
+
+@@@ FIND
+          if(flag) flag.textContent = e.flag || "";
+@@@ REPLACE
+          if(flag) flag.textContent = [e.blurb, e.flag].filter(Boolean).join(" ");
+@@@ END
+
+@@@ FIND
+              <a class="btn ghost opt" id="exBom_hr" download aria-disabled="true">BOM .csv &#8595;</a>
+@@@ REPLACE
+              <a class="btn ghost opt" id="exBom_hr" download aria-disabled="true">BOM .csv &#8595;</a>
+              <a class="btn ghost opt" id="exAnchors_hr" download aria-disabled="true">Anchor plan .svg &#8595;</a>
+@@@ END
+
+@@@ FIND
+    wire("hr",  {exReport:"report", exViewer:"viewer", exStd:"std", exReactions:"reactions", exBom:"bom"});
+@@@ REPLACE
+    wire("hr",  {exReport:"report", exViewer:"viewer", exStd:"std", exReactions:"reactions", exBom:"bom", exAnchors:"anchors"});
+@@@ END
+
+@@@ FIND
+        var notes = esc((r.gate_notes || []).join(" "));
+@@@ REPLACE
+        var notes = esc(r.gate_reason_text || (r.gate_notes || []).join(" "));
+@@@ END
+
+@@@ FIND
+        return '<tr><td><a href="#nonlinear" data-i="' + i + '">' + esc(e.title) + '</a></td><td>' + po + '</td><td>' + nl + '</td><td>' + dd + '</td><td>' + vd + '</td></tr>';
+@@@ REPLACE
+        if(r.gate !== "complete" && r.gate_reason_text) vd += '<br><span class="muted">' + esc(r.gate_reason_text) + "</span>";
+        return '<tr><td><a href="#nonlinear" data-i="' + i + '">' + esc(e.title) + '</a></td><td>' + po + '</td><td>' + nl + '</td><td>' + dd + '</td><td>' + vd + '</td></tr>';
+@@@ END
+
+@@@ FIND
+NLRHA with eleven records scaled to the IS&nbsp;1893 elastic spectrum
+@@@ REPLACE
+NLRHA with 11 record pairs from the FEMA P-695 far-field set (no Indian or Himalayan records) scaled to the IS&nbsp;1893 elastic spectrum
+@@@ END
+
+@@@ FIND
+(11 records each, all converged)
+@@@ REPLACE
+(11 record pairs at each level: 22 analyses, all converged)
+@@@ END
+
+@@@ FIND
+<th>Pushover V<sub>max</sub>/V<sub>B</sub> X / Y</th>
+@@@ REPLACE
+<th>Pushover peak base shear X / Y</th>
+@@@ END
+
+@@@ FIND
+        var po = Number(p.vmax_vb_x).toFixed(1) + " / " + Number(p.vmax_vb_y).toFixed(1);
+@@@ REPLACE
+        // per direction: the index's own text (">= 5.3", "under review") when present, else the number
+        var pv = function(d, w){
+          var txt = p[(w ? "vmax_w_text_" : "vmax_vb_text_") + d], num = p[(w ? "vmax_w_" : "vmax_vb_") + d];
+          var rev = p["under_review_" + d], tip = rev ? (p["review_" + d] || "under review")
+                  : (p["vmax_lower_bound_" + d] ? (p.vmax_lower_bound_note || "lower bound") : "");
+          if(p["mce_target_reached_" + d] === false && p["mce_target_text_" + d]) tip = (tip ? tip + " " : "") + p["mce_target_text_" + d];
+          var shown = txt != null ? esc(txt) : (p["vmax_lower_bound_" + d] ? "&ge;&#8239;" : "") + Number(num).toFixed(w ? 2 : 1);
+          return '<span' + (tip ? ' title="' + esc(tip) + '"' : "") + (rev ? ' class="muted"' : "") + ">" + shown + "</span>";
+        };
+        var w = p.headline === "vmax_w";
+        var po = '<span class="nw">' + pv("x", w) + " / " + pv("y", w) + '</span><br><span class="muted nw"' +
+                 (w ? ' title="' + esc((p.shed_basis || "") + (p.vmax_vb_note ? "; " + p.vmax_vb_note : "")) + '">V<sub>max</sub>/W' : ">V<sub>max</sub>/V<sub>B</sub>") + "</span>";
+@@@ END
+
+@@@ FIND
+        <p class="muted exnote">V<sub>max</sub>/V<sub>B</sub> = peak pushover base shear / IS&nbsp;1893 design base shear, per direction.
+           NLRHA: the largest storey drift of the 11-record mean, at DBE and MCE, with the records that converged;
+@@@ REPLACE
+        <p class="muted exnote">Pushover: V<sub>max</sub>/V<sub>B</sub> = peak base shear / IS&nbsp;1893 design base shear, per
+           direction. On sheds and other single-storey or industrial buildings V<sub>B</sub> (R-reduced) is small, so the headline
+           there is V<sub>max</sub>/W, the peak base shear over the seismic weight. &ge; marks a lower bound: that pushover
+           stopped numerically before the curve reached its peak. &ldquo;Under review&rdquo; marks a pushover direction whose
+           curve is not physically credible as it stands (hover for why); its values are not to be relied on until the cause
+           is found.
+           NLRHA: the largest storey drift of the mean over 11 record pairs (two horizontal components each) from the FEMA
+           P-695 far-field set, at DBE and MCE, with the pairs that converged. The set holds no Indian or Himalayan records,
+           so near-field and long-duration effects of Indian earthquakes are not represented;
+@@@ END

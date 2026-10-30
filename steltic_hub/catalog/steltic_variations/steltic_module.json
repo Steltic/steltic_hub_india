@@ -27,6 +27,7 @@
     "STELTIC_INDIA_DIR": "{need.steltic_india}",
     "STELTIC_INDIA_PYTHON": "{python.steltic_india}",
     "STELTIC_CFS_DIR": "{need.steltic_CFS_india}",
+    "STELTIC_CFS_PYTHON": "{python.steltic_CFS_india}",
     "INDIA_CORPUS_ROOT": "{data_dir}/grokbot"
   },
   "credentials": {

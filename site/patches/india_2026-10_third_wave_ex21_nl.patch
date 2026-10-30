@@ -1,0 +1,21 @@
+# india.html, third wave: the nonlinear count once the MSME shed's nonlinear run (stage 2) is published.
+# Applied by the third-wave config only when the build publishes IN_Ex21_MSME_angle_truss_shed_Hosur in the nonlinear index (when_nl_ids):
+# 24 -> 25 nonlinear runs (the description, the introduction and the section heading).
+# Base: the live second-wave page; each FIND occurs once in it, before or after the hot-rolled count patch.
+@@@ FIND
+and 24 nonlinear runs with a verdict table
+@@@ REPLACE
+and 25 nonlinear runs with a verdict table
+@@@ END
+
+@@@ FIND
+and 24 nonlinear runs</a>
+@@@ REPLACE
+and 25 nonlinear runs</a>
+@@@ END
+
+@@@ FIND
+<h3 id="nlCount">24 nonlinear runs</h3>
+@@@ REPLACE
+<h3 id="nlCount">25 nonlinear runs</h3>
+@@@ END
