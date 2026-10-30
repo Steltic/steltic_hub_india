@@ -39,19 +39,24 @@ keys. It is deterministic: the same job and switches give the same sizes.
 Open the project in the hub, then **Design variations → Variations → PEB lever study** (the entry at the right of the
 step bar). The Variations server runs the study runner itself, as one child process, in HR Steel's own checkout and
 Python environment; the hub finds both through its registry (the module manifest's `uses`, which hands the server
-`STELTIC_INDIA_DIR`, `STELTIC_INDIA_PYTHON` and `STELTIC_CFS_DIR`). No language model is involved and nothing leaves
-the PC.
+`STELTIC_INDIA_DIR`, `STELTIC_INDIA_PYTHON`, `STELTIC_CFS_DIR` and `STELTIC_CFS_PYTHON`). No language model is involved
+and nothing leaves the PC.
 
-* **Does it apply?** The tab asks the runner itself: it reads the runner's own `--help` for the switches it offers and
-  imports `scripts/peb_lever_study.py` in HR Steel's interpreter for the job specs and, for this project, the variant
-  list and each variant's code status (`variants_for`; no analysis runs). The project name must be a job spec of
-  `scripts/peb_lever_jobs.py` (the four PEB golds, or your own spec, below). Otherwise the tab says why the study does
-  not apply — HR Steel or CFS Steel (IS 801, which re-designs the purlins and girts) not installed, an HR Steel without
-  the study runner, a multistorey base brief, no job spec of that name — and hides the Run button.
+* **Does it apply?** The tab asks the runner itself, through its contract:
+  `scripts/peb_lever_study.py --list-variants --json --job <project> --jobs-root <job folder>` prints the switches it
+  offers and, for this project, where the job spec comes from and the variant list of each ladder with each variant's
+  code status. Nothing is sized. A project named after a job spec of `scripts/peb_lever_jobs.py` (the four PEB golds)
+  uses that spec; any other PEB project has its spec inferred from its own `cfg.py` (below), and the tab says so, with
+  notes on how each field was read. An HR Steel whose runner has no contract (the PEB variations release) is read the
+  older way (its `--help`, and an import of the script for its job specs and `variants_for`); there the project name
+  must be a job spec. Otherwise the tab says why the study does not apply — HR Steel or CFS Steel (IS 801, which
+  re-designs the purlins and girts) not installed, an HR Steel without the study runner, a multistorey base brief, no
+  spec and none that could be inferred (with the runner's reasons) — and hides the Run button.
 * **The job folder** it reads (only reads: every variant runs in a copy): the project folder when it holds `cfg.py`
   (a PEB job written the way the golds are — put there by you, or staged by the Nonlinear module); otherwise HR
-  Steel's design of this project, fetched through HR Steel's own API when the study starts and unpacked under
-  `variations/peb_study/input/`.
+  Steel's design of this project, fetched through HR Steel's own API and unpacked under `variations/peb_study/input/`.
+  It is fetched again when the study starts; for a project with no hand-written spec, **Read HR Steel's design of this
+  project** fetches it first, so the spec can be inferred before you choose the variants.
 * **Variants**: the strict baseline (always), each lever alone, all compliant levers together, the cumulative ladder
   (as a whole: each step starts from the previous one), the market-practice bundle and, for IN_Ex1, solar-ready —
   exactly the list the runner gives this job, with its status: compliant, reading (a reading an owner ruling rejected,
@@ -62,7 +67,9 @@ the PC.
   default; untick to start again). A resumed run is refused when the job's `cfg.py` or secondary script has changed
   since the rows were sized, or when it would switch ladder. One study at a time on the PC; Stop ends the runner and
   every full run it started. The tab streams the runner's output, one progress step per variant, and re-attaches when
-  reopened.
+  reopened. With a runner that offers them, the tab passes `--progress-json` (the progress comes from the runner's own
+  JSON event lines, `@@peb-study {...}`, kept in the run log) and `--cfs-python` with CFS Steel's own interpreter, so
+  the purlins and girts are designed in CFS Steel's environment (not passed when both modules share one interpreter).
 * **Outputs**, listed with links as they are written (after each variant): `study.html`, `study.csv`, `study.json`,
   `index.html`, `study_tables.md`, `study_all.json` and the run log, under
   `<project>/variations/peb_study/work/` (`run.json` there records the command, the variants and the exit code).
@@ -77,22 +84,36 @@ the PC.
      'rafter_splice', `column_base` with `shear_key`);
    * `secondary/secondary_is801.py` with `PURLIN`, `GIRT` and `FY` constants (the CFS engine design of the purlins and
      girts), as in the golds.
-2. Add a job spec for your job to `scripts/peb_lever_jobs.py` (copy `TEMPLATE`): the member constants and their group,
-   the dimensions that must stay equal (`links`: knee depth of column and rafter, matching depths at a splice), the
-   fabrication limits, the knee column constant, the constant each end plate is built from (`splice_faces`), the
-   column constants whose base section sets the 1.2 Vd demand, a typical frame line, the base fixity, the brick dado
-   height, the seismic zone / R constants / route, the roof imposed-load constant and the secondary script constants.
+2. The job spec. With the third-wave runner you need not write one: a job with no spec in
+   `scripts/peb_lever_jobs.py` gets one inferred from its own `cfg.py` (`scripts/peb_lever_infer.py`; the job's model is
+   built once, no analysis). The member constants are the top-level `WI` / `TI` constants the model uses, with their
+   role (column / rafter) and whether they are in the moment frame from the members the build makes of them (a
+   braced-frame column pinned at its top is kept at its size); the ties are the equal depths that meet at the knee and
+   at each rafter splice; the joint faces are matched to the end plates' lever arms; the shear-keyed bases, the
+   typical (middle) frame, its base fixity, the brick dado (`DADO_H`, else the lowest girt when the cladding is
+   brittle), the seismic zone / R constants (`R_Y`, `R_X`) / route, the roof imposed-load constant (`LR`) and the
+   secondary script follow. Check it before a long study with
+   `python scripts/peb_lever_study.py --list-variants --job <job> --jobs-root <folder>` (no run): it prints the spec's
+   source, how each field was read and the variants. What cannot be read is a reason the spec is refused, never a
+   guess; the spec a study used is written to `<work>/<job>/job_spec.json`. A hand-written spec still wins: add one to
+   `scripts/peb_lever_jobs.py` (copy `TEMPLATE`, named after the job folder) to change any field: the member constants
+   and their group, the dimensions that must stay equal (`links`), the fabrication limits, the knee column constant,
+   the constant each end plate is built from (`splice_faces`), the column constants whose base section sets the 1.2 Vd
+   demand, a typical frame line, the base fixity, the brick dado height, the seismic zone / R constants / route, the
+   roof imposed-load constant and the secondary script constants.
 3. Run (one heavy analysis at a time; every full run is one child process):
 
    ```
    python scripts/peb_lever_study.py --job <your job folder name> \
        --jobs-root <folder that holds your job> --work <output folder> \
-       --cfs-root <steltic_CFS_india checkout with cfs_generic_sections> [--max-runs 8] [--resume]
+       --cfs-root <steltic_CFS_india checkout with cfs_generic_sections> [--max-runs 8] [--resume] \
+       [--cfs-python <CFS Steel's interpreter>]
    ```
 
    `--variants strict,joint_deliverable` runs only the named rows (the strict baseline is always run first, since
-   the levers start from it); `--render --work <folder>` re-writes the outputs. From the hub, put the job folder in
-   the project folder, name the project after the job spec and use the Variations tab instead (above).
+   the levers start from it); `--render --work <folder>` re-writes the outputs; `--cfs-python` designs the purlins and
+   girts in CFS Steel's own Python environment when it is not HR Steel's. From the hub, put the job folder in the
+   project folder (or design the project with HR Steel) and use the Variations tab instead (above).
 4. Read `<work>/<job>/study.html` (stacked bar of kg/m² by group per variant, the governing check of each, the
    change from the strict baseline, the member sizes and purlins of each variant), `study.csv` and `study.json`.
    `<work>/index.html` puts all the studied jobs on one page.

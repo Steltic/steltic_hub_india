@@ -1,0 +1,52 @@
+{
+ "_about": "The third-wave publish (template; the lead fills it as the third-wave PRs merge). The base is the live second-wave site: a mirror of public_html as live (the second-wave tree, byte-identical to the site on 2026-10-24) and the site itself for anything the mirror lacks. Self-contained: the zip carries the report figures and every viewer the pages link, so it alone reproduces the India pages. Before building: the re-run golds in GOLD (new PEB golds, IN_Ex7-Ex20 re-sized, the MSME shed), its title in titles_wave3.json, the NL re-runs as a source, the page patch for the new counts (india_2026-10_third_wave.patch).",
+ "vars": {
+  "SCRATCH": "/tmp/claude-0/-home-claude/26b06ce6-daa6-502b-8528-520fd2541562/scratchpad",
+  "LIVE_MIRROR": "/tmp/claude-0/-home-claude/26b06ce6-daa6-502b-8528-520fd2541562/scratchpad/sitebuild/public_html2",
+  "GOLD": "/home/claude/gold",
+  "BRIEFS": "/home/claude/briefs",
+  "NL_WORK": "/home/claude/nl_work",
+  "NL_RERUN": "/home/claude/nl_work/jobs",
+  "NL_RERUN_MARK": "/home/claude/nl_rerun",
+  "NL_REPO": "/home/claude/steltic_nonlinear_india",
+  "HR_REPO": "/home/claude/steltic_india",
+  "CFS_REPO": "/home/claude/steltic_cfs_india",
+  "PY": "/home/claude/venv312/bin/python",
+  "CFS_PUBLISH": "/home/claude/cfs_publish2/cfs",
+  "OUT": "/home/claude/site_build/third_wave"
+ },
+ "name": "steltic_india_third_wave_2026-10",
+ "rollback_name": "steltic_india_ROLLBACK_before_third_wave",
+ "out": "${OUT}",
+ "self_contained": true,
+ "live": {"mirror": "${LIVE_MIRROR}", "url": "https://stelticai.com/"},
+ "page": {"patches": ["../patches/india_2026-10_third_wave.patch"]},
+ "hr": {
+  "jobs": "${GOLD}/jobs_hr",
+  "titles": ["${BRIEFS}/titles_wave2.json"],
+  "meta_notes": {
+   "IN_Ex13_SCBF_5levels_Delhi": "deck spans the full bay: secondary beams would be added and are not in the kg/m²",
+   "IN_Ex14_SCBF_hospital_Kolkata": "deck spans the full bay: secondary beams would be added and are not in the kg/m²",
+   "IN_Ex16_SMF_office_Mumbai": "deck spans the full bay: secondary beams would be added and are not in the kg/m²"
+  },
+  "system_names": {"SMRF": "SMF"},
+  "extra": []
+ },
+ "cfs": {"publish": "${CFS_PUBLISH}"},
+ "nl": {
+  "runs": "${NL_WORK}/nl_1004_renum",
+  "sources": [
+   {"dir": "${NL_RERUN}", "marker_dir": "${NL_RERUN_MARK}", "_about": "re-runs first: the ids present in NL_RERUN_MARK (or list them: \"ids\": [...]); their viewers come with the self-contained pass"},
+   {"dir": "${NL_WORK}/peb_2026-10-16"},
+   {"dir": "${NL_WORK}/nl_1004_renum"}
+  ],
+  "repo": "${NL_REPO}",
+  "python": "${PY}",
+  "engine_dir": "${NL_WORK}/hr_main_e340df8/steel_engine",
+  "rebuild_ddm": true,
+  "regenerate": false,
+  "titles": ["${BRIEFS}/titles_wave2.json"],
+  "extra_ids": []
+ },
+ "repos": {"steltic_india": "${HR_REPO}", "steltic_CFS_india": "${CFS_REPO}", "steltic_nonlinear_india": "${NL_REPO}"}
+}

@@ -797,6 +797,40 @@ def peb_study_status(project: str):
     return _peb_status(project)
 
 
+def _peb_stage_hr(project: str, src: dict):
+    """Fetch HR Steel's design of this project through its own API and unpack it under variations/peb_study/input/."""
+    try:
+        data = hr.download(STELTIC_URL, project)
+    except hr.DesignError as e:
+        raise HTTPException(404, f"HR Steel has no design for this project ({e}): put the PEB job folder "
+                                 "(cfg.py, secondary/, design/) in the project folder, or design it with HR Steel first")
+    except Exception as e:
+        raise HTTPException(502, f"HR Steel unreachable: {e}")
+    try:
+        peb.stage_package(mx.unzip(data), pathlib.Path(src["dir"]))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(502, f"HR Steel's package could not be unpacked: {e}")
+
+
+@app.post("/api/project/{project}/peb-study/stage")
+def peb_study_stage(project: str):
+    """Read HR Steel's design of this project (its package, unpacked under variations/peb_study/input/) so that the
+    study runner can infer the job spec from its cfg.py. Returns the new status."""
+    project = clean_name(project)
+    with _PEB_START:
+        run = peb.current()
+        if run and not run.finished and run.project == project:
+            raise HTTPException(409, "the PEB lever study of this project is running: its job folder is in use")
+        src = peb.job_source(project, JOBS, peb.base_dir(JOBS, project), STELTIC_URL)
+        if src["kind"] != "hr":
+            raise HTTPException(400, "nothing to fetch: the project folder holds the job (cfg.py)" if src["kind"]
+                                else "HR Steel's server is not available to fetch this project's design")
+        _peb_stage_hr(project, src)
+    return _peb_status(project)
+
+
 @app.post("/api/project/{project}/peb-study/run")
 def peb_study_run(project: str, body: dict = Body(default={})):
     """Run the lever study on this project: body {variants: [runner variant names], max_runs, resume, ladder,
@@ -848,19 +882,7 @@ def peb_study_run(project: str, body: dict = Body(default={})):
         src = s["source"]
         base = peb.base_dir(JOBS, project)
         if src["kind"] == "hr":
-            try:
-                data = hr.download(STELTIC_URL, project)
-            except hr.DesignError as e:
-                raise HTTPException(404, f"HR Steel has no design for this project ({e}): put the PEB job folder "
-                                         "(cfg.py, secondary/, design/) in the project folder, or design it with HR Steel first")
-            except Exception as e:
-                raise HTTPException(502, f"HR Steel unreachable: {e}")
-            try:
-                peb.stage_package(mx.unzip(data), pathlib.Path(src["dir"]))
-            except ValueError as e:
-                raise HTTPException(400, str(e))
-            except Exception as e:
-                raise HTTPException(502, f"HR Steel's package could not be unpacked: {e}")
+            _peb_stage_hr(project, src)
         sha = peb.input_hash(src["dir"])
         prev = peb.read_record(base)
         if resume and prev.get("input_sha") and prev["input_sha"] != sha and \
@@ -870,14 +892,19 @@ def peb_study_run(project: str, body: dict = Body(default={})):
                                      "again on the current design.")
         p = peb.paths()
         solar = "solar_ready" in selection
+        cfs_py = peb.cfs_python_for_run(p, cli)
+        prog = bool(cli.get("progress_json") and cli.get("progress_prefix"))
         cmd = peb.command(p, project, src, base / "work", selection, max_runs, resume, solar,
-                          ladder=ladder if "--ladder" in cli["flags"] else None, stop_after_min=stop_after)
+                          ladder=ladder if "--ladder" in cli["flags"] else None, stop_after_min=stop_after,
+                          cfs_python=cfs_py, progress_json=prog)
         record = {"project": project, "job": project, "chosen": chosen, "variants": selection, "max_runs": max_runs,
                   "resume": resume, "solar": solar, "ladder": ladder, "stop_after_min": stop_after, "source": src,
                   "input_sha": sha, "cmd": cmd, "cwd": p["dir"], "started_at": time.time(), "finished_at": None,
-                  "status": "running", "rc": None}
+                  "status": "running", "rc": None, "cfs_python": cfs_py or None,
+                  "spec_source": (s.get("job") or {}).get("spec_source")}
         run = peb.StudyRun(project, cmd, p["dir"], peb.child_env(p), base, record,
-                           {v["name"]: v["label"] for v in variants}, len(peb.sized_runs(variants, selection)))
+                           {v["name"]: v["label"] for v in variants}, len(peb.sized_runs(variants, selection)),
+                           progress_prefix=cli.get("progress_prefix") if prog else "")
         try:
             peb.start(run)
         except RuntimeError as e:
