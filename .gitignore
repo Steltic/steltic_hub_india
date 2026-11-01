@@ -10,6 +10,8 @@ selftest-report.txt
 .pytest_cache/
 # round-by-round hand-off material and the patch series for the MODULE repos: not hub source
 patches/
+# ... but the site build's page patches are source (site/patches/*.patch)
+!site/patches/
 Claude outputs/
 *.zip
 *.bundle

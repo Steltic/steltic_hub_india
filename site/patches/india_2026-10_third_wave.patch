@@ -1,0 +1,11 @@
+# india.html, third-wave publish: the patch of the live second-wave page (the page live since 2026-10-24).
+# No block yet: the third-wave page text lands with the third-wave PRs. The build's count check prints a CHECK line
+# when the page's prose no longer matches what the build publishes -- "39 worked Indian designs", "20 Indian example
+# briefs ... plus four sub-units", "24 nonlinear runs" -- e.g. when the angle-truss MSME shed is added. Add one block
+# per change, copying the FIND text exactly from the live page:
+#
+# @@@ FIND
+# <exact text of the live page>
+# @@@ REPLACE
+# <new text>
+# @@@ END

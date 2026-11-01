@@ -6,8 +6,14 @@ variant names and status strings of steltic_india's runner) and the same command
 progress lines ("== <job> / <variant>"), writes <work>/<job>/study.json / study.csv / study.html and <work>/index.html,
 study_all.json, study_tables.md, and records how it was called in <work>/fake_calls.jsonl.
 
-It mirrors the runner of the PEB variations release with the second-wave switches (--ladder full|short,
---stop-after-min); FAKE_OLD_RUNNER=1 makes it the first release's runner (neither switch, variants_for(spec, solar)).
+It mirrors the third-wave runner (2026-10, handoff P11): the contract (--list-variants --json), a spec inferred from
+the job's cfg.py for a job without a hand-written one, --cfs-python and --progress-json, besides the second-wave
+switches (--ladder full|short, --stop-after-min). FAKE_SECOND_WAVE_RUNNER=1 makes it the PEB variations release's
+runner (no contract, no inference, no --cfs-python / --progress-json); FAKE_OLD_RUNNER=1 the first release's (no
+--ladder / --stop-after-min either, variants_for(spec, solar)).
+
+The fake "inference": a cfg.py with a line `# FAKE_PEB_SPEC {json}` has that spec (the real runner builds the job's
+model, scripts/peb_lever_infer.py); any other cfg.py has none, with a reason.
 
 Test knobs (environment): FAKE_STUDY_SLEEP seconds per variant; FAKE_STUDY_FAIL=<variant> exits 3 at that variant.
 """
@@ -50,6 +56,67 @@ def _worst(sts):
 
 
 OLD = bool(os.environ.get("FAKE_OLD_RUNNER"))
+SECOND = OLD or bool(os.environ.get("FAKE_SECOND_WAVE_RUNNER"))
+PREFIX = "@@peb-study "
+PROGRESS = False
+
+
+def progress(event, **kw):
+    if PROGRESS:
+        print(PREFIX + json.dumps(dict(kw, event=event), sort_keys=True), flush=True)
+
+
+def job_spec(job, jobs_root):
+    """(spec, source, notes): the hand-written spec, else the fake inference from <jobs_root>/<job>/cfg.py."""
+    if job in JOB_SPECS:
+        return JOB_SPECS[job], "job spec (scripts/peb_lever_jobs.py)", []
+    p = os.path.join(jobs_root or "", job, "cfg.py")
+    if not os.path.isfile(p):
+        raise ValueError(["no cfg.py in the job folder"])
+    for line in open(p, encoding="utf-8"):
+        if line.startswith("# FAKE_PEB_SPEC "):
+            spec = json.loads(line[len("# FAKE_PEB_SPEC "):])
+            return spec, "inferred from the job's cfg.py (scripts/peb_lever_infer.py)", ["fake: spec read from cfg.py"]
+    raise ValueError(["no welded / tapered main-frame column and rafter given as top-level constants of cfg.py",
+                      "no R constants (R_Y / R_X) in cfg.py"])
+
+
+def _tag_class(st):
+    s = str(st or "")
+    if "NOT" in s or "not compliant" in s:
+        return "not compliant"
+    if s == "n/a":
+        return "n/a"
+    return "compliant" if s.startswith(("compliant", "published", "strict", "permitted")) else "reading"
+
+
+def contract(jobs, jobs_root):
+    out = {"contract": "peb_lever_study", "version": 1,
+           "options": {"ladders": ["full", "short"], "stop_after_min": True, "resume": True, "control": True,
+                       "init_margins": True, "solar": True, "cfs_python": True, "spec_from_cfg": True,
+                       "progress_json": True, "max_runs_default": 8},
+           "progress": {"prefix": PREFIX, "events": ["plan", "variant", "resumed", "row", "budget", "job_done", "done"]},
+           "variant_order": list(VARIANT_ORDER), "labels": {n: label(n) for n in VARIANT_ORDER},
+           "code_status": ["compliant", "reading", "not compliant", "n/a"], "specs": sorted(JOB_SPECS), "jobs": {}}
+    for job in jobs:
+        try:
+            spec, src, notes = job_spec(job, jobs_root)
+        except ValueError as e:
+            out["jobs"][job] = {"name": job, "spec_source": None,
+                                "error": ["no job spec in scripts/peb_lever_jobs.py, and none could be inferred from "
+                                          "the job's cfg.py"] + list(e.args[0])}
+            continue
+        sol = job.startswith("IN_Ex1_")
+        by = {lad: [{"name": n, "label": label(n), "status": st, "compliance": _tag_class(st), "note": nt,
+                     "applies": kw is not None, "alias": (kw or {}).get("alias"), "start_from": (kw or {}).get("start_from"),
+                     "sized": kw is not None and not (kw or {}).get("alias")}
+                    for n, kw, st, nt in _variants(spec, solar=sol, ladder=lad)] for lad in ("full", "short")}
+        sz = spec.get("seismic") or {}
+        out["jobs"][job] = {"name": job, "spec_source": src, "spec_notes": notes, "zone": sz.get("zone"),
+                            "I": sz.get("I"), "route": sz.get("route"), "dado_height_mm": spec.get("dado_height_mm"),
+                            "base": spec.get("base"), "solar": sol, "members": sorted(spec.get("members") or {}),
+                            "variants_by_ladder": by}
+    return out
 
 
 def _variants(spec, solar=False, ladder="full"):
@@ -145,7 +212,17 @@ def main():
     ap.add_argument("--render", action="store_true")
     if not OLD:
         ap.add_argument("--stop-after-min", type=float, default=0.0)
+    if not SECOND:
+        ap.add_argument("--list-variants", action="store_true")
+        ap.add_argument("--json", action="store_true")
+        ap.add_argument("--cfs-python", default="")
+        ap.add_argument("--progress-json", action="store_true")
     a = ap.parse_args()
+    global PROGRESS
+    PROGRESS = bool(getattr(a, "progress_json", False))
+    if getattr(a, "list_variants", False):
+        print(json.dumps(contract(a.job, a.jobs_root)))
+        return
     ladder = getattr(a, "ladder", "full")
     budget = float(getattr(a, "stop_after_min", 0.0) or 0.0)
     os.makedirs(a.work, exist_ok=True)
@@ -154,7 +231,13 @@ def main():
             "PYTHONHASHSEED", "STELTIC_CFS_ROOT", "PYTHONDONTWRITEBYTECODE", "INDIA_CORPUS_ROOT")}}) + "\n")
     want = set(a.variants.split(",")) if a.variants else None
     for job in a.job:
-        spec = JOB_SPECS[job]
+        if SECOND:
+            spec = JOB_SPECS[job]
+        else:
+            try:
+                spec = job_spec(job, a.jobs_root)[0]
+            except ValueError as e:
+                raise SystemExit("%s: no spec (%s)" % (job, "; ".join(e.args[0])))
         if not os.path.isfile(os.path.join(a.jobs_root, job, "cfg.py")):
             raise SystemExit("no cfg.py in %s" % os.path.join(a.jobs_root, job))
         work = os.path.join(a.work, job)
@@ -165,15 +248,21 @@ def main():
             raise SystemExit("%s: the study in %s was run with --ladder %s" % (job, work, study["ladder"]))
         study["ladder"] = ladder
         stopped = None
-        for name, kw, status, note in _variants(spec, solar=a.solar and job.startswith("IN_Ex1_"), ladder=ladder):
+        vlist = _variants(spec, solar=a.solar and job.startswith("IN_Ex1_"), ladder=ladder)
+        plan = [n for n, kw, st, nt in vlist if kw is not None and not kw.get("alias") and (not want or n in want)
+                and not (a.resume and (study["rows"].get(n) or {}).get("done"))]
+        progress("plan", job=job, ladder=ladder, variants=plan, n=len(plan))
+        for name, kw, status, note in vlist:
             if want and name not in want:
                 continue
             if a.resume and (study["rows"].get(name) or {}).get("done"):
                 print("== %s / %s: done (resume)" % (job, name), flush=True)
+                progress("resumed", job=job, variant=name, label=label(name))
                 continue
             if budget > 0 and (time.time() - T_START) > 60.0 * budget and kw is not None and not kw.get("alias"):
                 print("== %s: time budget of %s min reached before '%s'; re-run with --resume to continue"
                       % (job, budget, name), flush=True)
+                progress("budget", job=job, before=name, minutes=budget)
                 stopped = name
                 break
             if kw is None:
@@ -184,6 +273,7 @@ def main():
                 if src and src.get("done"):
                     study["rows"][name] = dict(src, name=name, label=label(name), status=status, alias_of=kw["alias"])
                 continue
+            progress("variant", job=job, variant=name, label=label(name), status=status)
             print("== %s / %s" % (job, name), flush=True)
             print("    local sizing: fake, no analysis", flush=True)
             time.sleep(float(os.environ.get("FAKE_STUDY_SLEEP") or 0))
@@ -200,6 +290,7 @@ def main():
                     r["delta_vs_strict_kg_m2"] = round(r["kg_m2"]["total"] - st["kg_m2"]["total"], 2)
             json.dump(study, open(p, "w"), indent=1)
             _render(work, study)
+            progress("row", job=job, variant=name, label=label(name), status=status, kg_m2=kg, n_full_runs=2)
         if stopped:
             study["stopped_before"] = stopped
             study.pop("finished", None)
@@ -212,6 +303,7 @@ def main():
     open(os.path.join(a.work, "study_all.json"), "w").write("{}")
     open(os.path.join(a.work, "study_tables.md"), "w").write("### tables\n")
     print("wrote %s" % os.path.join(a.work, "index.html"), flush=True)
+    progress("done", work=a.work, jobs=a.job)
 
 
 if __name__ == "__main__":

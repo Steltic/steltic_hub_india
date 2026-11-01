@@ -9,12 +9,18 @@ own checkout and interpreter. The hub resolves both from its registry and hands 
   STELTIC_INDIA_DIR     {need.steltic_india}       HR Steel's checkout (scripts/, steel_engine/)
   STELTIC_INDIA_PYTHON  {python.steltic_india}     its interpreter (HR Steel's own venv)
   STELTIC_CFS_DIR       {need.steltic_CFS_india}   CFS Steel's checkout: the study re-designs the purlins and girts with it
+  STELTIC_CFS_PYTHON    {python.steltic_CFS_india} CFS Steel's own interpreter (third wave): the runner's --cfs-python
 
 A variable is unset while its module is not installed, and the tab then says what is missing.
 
-The study runner itself decides which variants a job has and what each one's code status is: a short probe in HR
-Steel's interpreter imports scripts/peb_lever_study.py and returns its variant list for the job (variants_for), so the
-tab offers exactly the switches the runner offers and labels the ones the runner calls not compliant.
+The study runner itself decides which variants a job has and what each one's code status is. Third wave (2026-10,
+handoff P11): the runner states it in its contract, `scripts/peb_lever_study.py --list-variants --json` (its switches,
+where the job's spec comes from, the variants of each ladder with their code status; nothing is sized), and a project
+with no hand-written job spec gets one inferred from its own cfg.py (the runner's scripts/peb_lever_infer.py), so an
+engineer's own PEB job needs no spec. A run passes --cfs-python (the CFS engine in its own interpreter) and
+--progress-json (one JSON line per progress event) when the runner offers them. A runner without the contract (the
+PEB variations release) is still read the older way: its --help, and an import of the script for its job specs and
+variants_for.
 
 Inside the project folder (the hub's projects folder, VARIATIONS_JOBS/<project>):
   variations/peb_study/input/<project>/  HR Steel's design of this project (its package, unpacked) -- used when the
@@ -75,11 +81,27 @@ class ProbeError(RuntimeError):
 
 # ---------------------------------------------------------------- what the hub resolved
 def paths() -> dict:
-    """HR Steel's checkout, interpreter and study script, and CFS Steel's checkout ('' when not installed)."""
+    """HR Steel's checkout, interpreter and study script, and CFS Steel's checkout and interpreter ('' when not
+    installed)."""
     d = (os.environ.get("STELTIC_INDIA_DIR") or "").strip()
     return {"dir": d, "python": (os.environ.get("STELTIC_INDIA_PYTHON") or "").strip(),
             "cfs": (os.environ.get("STELTIC_CFS_DIR") or "").strip(),
+            "cfs_python": (os.environ.get("STELTIC_CFS_PYTHON") or "").strip(),
             "script": str(pathlib.Path(d, *SCRIPT)) if d else ""}
+
+
+def cfs_python_for_run(p: dict, cli: dict) -> str:
+    """The interpreter to pass as --cfs-python: CFS Steel's own, when the runner takes the switch and that interpreter
+    exists and is not HR Steel's ('' otherwise: the runner then uses its own, as the PEB variations release did)."""
+    py = p.get("cfs_python") or ""
+    if not cli.get("cfs_python") or not py or not pathlib.Path(py).exists():
+        return ""
+    try:
+        if p.get("python") and pathlib.Path(py).resolve() == pathlib.Path(p["python"]).resolve():
+            return ""
+    except OSError:
+        pass
+    return py
 
 
 def runner_problem(p: dict) -> str:
@@ -144,6 +166,8 @@ print(json.dumps(out, default=str))
 '''
 _PROBE_CACHE: dict = {}
 _FLAG = re.compile(r"(?<![\w-])--[a-z][a-z0-9-]*")
+CONTRACT_NAME = "peb_lever_study"
+INFER_FILE = ("scripts", "peb_lever_infer.py")
 
 
 def _run(p: dict, args: list[str]) -> subprocess.CompletedProcess:
@@ -169,7 +193,7 @@ def read_cli(p: dict) -> dict:
 
 def _stamp(p: dict) -> tuple:
     out = []
-    for rel in (SCRIPT, JOB_SPECS_FILE, LEVERS_FILE):
+    for rel in (SCRIPT, JOB_SPECS_FILE, LEVERS_FILE, INFER_FILE):
         try:
             out.append(pathlib.Path(p["dir"], *rel).stat().st_mtime)
         except OSError:
@@ -177,14 +201,89 @@ def _stamp(p: dict) -> tuple:
     return tuple(out)
 
 
-def probe(p: dict, job: str) -> dict:
-    """The runner's command line (read_cli), its job specs and, for `job`, its variants for each --ladder it offers
-    (name, label, status, note, applies, alias, start_from), read by running scripts/peb_lever_study.py --help and
-    importing it in HR Steel's interpreter (variants_for is pure: no analysis runs). Cached until one of the runner's
-    files changes. job['variants'] is the full ladder's list (the runner's default)."""
-    key = (p["python"], p["dir"], job, _stamp(p))
+def _job_stamp(jobs_root: str, job: str):
+    """What an inferred spec depends on: the job's cfg.py and secondary scripts (mtime and size)."""
+    if not jobs_root:
+        return None
+    d = pathlib.Path(jobs_root) / job
+    out = []
+    for f in [d / "cfg.py"] + sorted((d / "secondary").glob("*.py")):
+        try:
+            st = f.stat()
+            out.append((f.name, st.st_mtime, st.st_size))
+        except OSError:
+            out.append((f.name, None, None))
+    return tuple(out)
+
+
+def read_contract(p: dict, job: str, jobs_root: str = "") -> Optional[dict]:
+    """The runner's contract (scripts/peb_lever_study.py --list-variants --json --job <job> [--jobs-root <dir>]): its
+    switches and, for the job, where its spec comes from and its variants per ladder. None for a runner without the
+    switch (the PEB variations release), which argparse refuses with 'unrecognized arguments'."""
+    args = [p["script"], "--list-variants", "--json", "--job", job]
+    if jobs_root:
+        args += ["--jobs-root", str(jobs_root)]
+    r = _run(p, args)
+    if r.returncode != 0:
+        if "unrecognized arguments" in (r.stderr or "") and "--list-variants" in (r.stderr or ""):
+            return None
+        raise ProbeError(((r.stderr or "").strip().splitlines() or ["--list-variants gave exit code %s" % r.returncode])[-1][:400])
+    for line in reversed((r.stdout or "").strip().splitlines()):
+        try:
+            c = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(c, dict) and c.get("contract") == CONTRACT_NAME:
+            return c
+    raise ProbeError("the runner's --list-variants answer is not its contract")
+
+
+def _from_contract(c: dict, job: str) -> dict:
+    """The probe's answer from the runner's contract (the same shape as the older probe's)."""
+    o = c.get("options") or {}
+    flags = ["--job", "--jobs-root", "--work", "--cfs-root", "--published-root", "--variants", "--max-runs",
+             "--resume", "--solar", "--render", "--list-variants", "--json"]
+    for k, f in (("ladders", "--ladder"), ("stop_after_min", "--stop-after-min"), ("cfs_python", "--cfs-python"),
+                 ("progress_json", "--progress-json"), ("control", "--control"), ("init_margins", "--init-margins")):
+        if o.get(k):
+            flags.append(f)
+    cli = {"flags": sorted(set(flags)), "ladders": list(o.get("ladders") or ["full"]),
+           "stop_after_min": bool(o.get("stop_after_min")), "cfs_python": bool(o.get("cfs_python")),
+           "progress_json": bool(o.get("progress_json")), "spec_from_cfg": bool(o.get("spec_from_cfg")),
+           "contract": c.get("version"), "progress_prefix": (c.get("progress") or {}).get("prefix") or ""}
+    out = {"jobs": sorted(c.get("specs") or []), "job": None, "takes_ladder": True, "cli": cli, "contract": True,
+           "job_error": []}
+    j = (c.get("jobs") or {}).get(job) or {}
+    if j and not j.get("error"):
+        by = {}
+        for lad, rows in (j.get("variants_by_ladder") or {}).items():
+            by[lad] = [dict(v, compliance=v.get("compliance") or compliance(v.get("status"))) for v in rows]
+        out["job"] = {"name": job, "zone": j.get("zone"), "I": j.get("I"), "route": j.get("route"),
+                      "dado_height_mm": j.get("dado_height_mm"), "base": j.get("base"), "solar": bool(j.get("solar")),
+                      "variant_order": list(c.get("variant_order") or ()), "variants_by_ladder": by,
+                      "spec_source": j.get("spec_source"), "spec_notes": list(j.get("spec_notes") or []),
+                      "members": list(j.get("members") or []),
+                      "inferred": bool(j.get("spec_source")) and job not in (c.get("specs") or [])}
+        out["job"]["variants"] = by.get("full") or next(iter(by.values()), [])
+    else:
+        out["job_error"] = list(j.get("error") or [])
+    return out
+
+
+def probe(p: dict, job: str, jobs_root: str = "") -> dict:
+    """The runner's command line, its job specs and, for `job`, its variants for each --ladder it offers (name, label,
+    status, note, applies, alias, start_from): from the runner's contract (--list-variants --json; a job with no
+    hand-written spec gets one inferred from <jobs_root>/<job>/cfg.py), or, from a runner without it, by running
+    --help and importing the script in HR Steel's interpreter (variants_for is pure: no analysis runs). Cached until
+    one of the runner's files, or the job's cfg.py, changes. job['variants'] is the full ladder's list."""
+    key = (p["python"], p["dir"], job, str(jobs_root or ""), _stamp(p), _job_stamp(jobs_root, job))
     if key in _PROBE_CACHE:
         return _PROBE_CACHE[key]
+    c = read_contract(p, job, jobs_root)
+    if c is not None:
+        out = _from_contract(c, job)
+        _PROBE_CACHE[key] = out
+        return out
     cli = read_cli(p)
     r = _run(p, ["-c", PROBE, p["dir"], job, ",".join(cli["ladders"])])
     lines = (r.stdout or "").strip().splitlines()
@@ -196,7 +295,9 @@ def probe(p: dict, job: str) -> dict:
         raise ProbeError(f"unreadable answer ({e})")
     if not out.get("takes_ladder"):
         cli["ladders"] = ["full"]
-    out["cli"] = dict(cli, stop_after_min="--stop-after-min" in cli["flags"])
+    out["cli"] = dict(cli, stop_after_min="--stop-after-min" in cli["flags"], cfs_python=False, progress_json=False,
+                      spec_from_cfg=False, contract=None, progress_prefix="")
+    out["contract"] = False
     job_meta = out.get("job")
     if job_meta:
         for rows in job_meta["variants_by_ladder"].values():
@@ -313,10 +414,11 @@ def input_hash(job_dir) -> str:
 
 
 def command(p: dict, job: str, src: dict, work, variants: list[str], max_runs: int, resume: bool,
-            solar: bool, ladder: Optional[str] = None, stop_after_min: float = 0.0) -> list[str]:
-    """The runner's command line (peb_lever_study.py --help): the job, the folder that holds it (also the
+            solar: bool, ladder: Optional[str] = None, stop_after_min: float = 0.0, cfs_python: str = "",
+            progress_json: bool = False) -> list[str]:
+    """The runner's command line (its contract, or its --help): the job, the folder that holds it (also the
     'published' root, so the job's own take-off is the 'as published' row), the work folder, the CFS checkout;
-    --ladder and --stop-after-min only when given (a runner that offers them)."""
+    --ladder, --stop-after-min, --cfs-python and --progress-json only when given (a runner that offers them)."""
     cmd = [p["python"], "-u", "-B", p["script"], "--job", job, "--jobs-root", src["jobs_root"], "--work", str(work),
            "--cfs-root", p["cfs"], "--published-root", src["jobs_root"], "--variants", ",".join(variants),
            "--max-runs", str(int(max_runs))]
@@ -324,6 +426,10 @@ def command(p: dict, job: str, src: dict, work, variants: list[str], max_runs: i
         cmd += ["--ladder", ladder]
     if stop_after_min and stop_after_min > 0:
         cmd += ["--stop-after-min", ("%g" % stop_after_min)]
+    if cfs_python:
+        cmd += ["--cfs-python", cfs_python]
+    if progress_json:
+        cmd.append("--progress-json")
     if resume:
         cmd.append("--resume")
     if solar:
@@ -420,8 +526,8 @@ def status(project: str, jobs_dir, base_brief: str, hr_url: str, building_kind: 
     if rec.get("status") == "running" and not live:
         rec["status"] = "interrupted"          # the module server stopped under it; --resume picks the rows up
     out = {"project": project, "is_peb_job": False, "ready": False, "reasons": [], "job": None, "source": None,
-           "spec_jobs": [], "runner": {k: p[k] for k in ("dir", "python", "cfs", "script")},
-           "cli": {"flags": [], "ladders": ["full"], "stop_after_min": False},
+           "spec_jobs": [], "runner": {k: p[k] for k in ("dir", "python", "cfs", "cfs_python", "script")},
+           "cli": {"flags": [], "ladders": ["full"], "stop_after_min": False}, "can_stage": False,
            "running": live, "busy_with": (run.project if run and not run.finished and not live else None),
            "progress": run.progress() if live else None, "run": rec or None,
            "max_runs_default": MAX_RUNS_DEFAULT, "max_runs_cap": MAX_RUNS_CAP,
@@ -431,8 +537,11 @@ def status(project: str, jobs_dir, base_brief: str, hr_url: str, building_kind: 
         out["reasons"].append(problem)
         out["rows"] = study_rows(base / "work", project)
         return out
+    # the job folder first: a runner with the contract infers the spec of a project that has none from its cfg.py
+    src = job_source(project, jobs_dir, base, hr_url)
+    staged = bool(src["kind"]) and (pathlib.Path(src["dir"]) / "cfg.py").is_file()
     try:
-        pr = probe(p, project)
+        pr = probe(p, project, src["jobs_root"] if staged else "")
     except ProbeError as e:
         out["reasons"].append(f"The study runner in HR Steel's checkout could not be read: {e}")
         out["rows"] = study_rows(base / "work", project)
@@ -441,15 +550,37 @@ def status(project: str, jobs_dir, base_brief: str, hr_url: str, building_kind: 
     out["cli"] = pr.get("cli") or out["cli"]
     job = pr.get("job")
     if not job:
+        out["source"] = src if src["kind"] else None
         if building_kind(base_brief or "") == "multistorey":
             out["reasons"].append("Not a PEB job: the base brief describes a multistorey building. The lever study "
                                   "re-sizes single-storey PEB sheds (tapered / welded portal frames).")
+        elif pr.get("contract") and (out["cli"] or {}).get("spec_from_cfg"):
+            if src["kind"] == "hr" and not staged:
+                out["can_stage"] = True
+                out["reasons"].append(
+                    f"No hand-written job spec named {project} in the study runner, so it infers one from the job's own "
+                    "cfg.py: read HR Steel's design of this project first (the button below fetches its package into "
+                    "this project's folder).")
+            elif not src["kind"]:
+                out["reasons"].append(
+                    f"No hand-written job spec named {project} in the study runner (scripts/peb_lever_jobs.py holds "
+                    f"{', '.join(out['spec_jobs']) or 'none'}), and no job folder to infer one from: put the PEB job "
+                    "folder (cfg.py, secondary/, design/) in the project folder, or design the project with HR Steel "
+                    "first (PEB_LEVERS.md, 'Your own PEB job').")
+            else:
+                out["reasons"].append(
+                    f"No hand-written job spec named {project} in the study runner, and none could be inferred from "
+                    f"{src['label']}:")
+                out["reasons"] += [r for r in pr.get("job_error") or [] if not r.startswith("no job spec in")]
+                out["reasons"].append("The study re-sizes PEB sheds written the way the PEB golds are (PEB_LEVERS.md, "
+                                      "'Your own PEB job').")
         else:
             out["reasons"].append(
                 f"No job spec named {project} in the study runner (scripts/peb_lever_jobs.py holds "
                 f"{', '.join(out['spec_jobs']) or 'none'}). The study runs on a PEB job written the way the PEB golds "
                 "are: name the project after one of those and put its job folder in the project folder, or add a "
-                "spec for your own PEB job (PEB_LEVERS.md, step 2).")
+                "spec for your own PEB job (PEB_LEVERS.md, step 2). An HR Steel with the third-wave runner infers "
+                "the spec from the job's cfg.py.")
         out["rows"] = study_rows(base / "work", project)
         return out
     out["is_peb_job"] = True
@@ -458,7 +589,6 @@ def status(project: str, jobs_dir, base_brief: str, hr_url: str, building_kind: 
     problem = cfs_problem(p)
     if problem:
         out["reasons"].append(problem)
-    src = job_source(project, jobs_dir, base, hr_url)
     if not src["kind"]:
         out["reasons"].append("No job folder: the project folder holds no cfg.py and HR Steel's server is not "
                               "available to fetch this project's design.")
@@ -473,9 +603,13 @@ class StudyRun(threading.Thread):
     (re-attachable from any sequence number) and kept in study.log. Stop ends the whole process tree."""
 
     def __init__(self, project: str, cmd: list[str], cwd: str, env: dict, base, record: dict, labels: dict,
-                 expected: int):
+                 expected: int, progress_prefix: str = ""):
         super().__init__(daemon=True, name=f"peb-study-{project}")
         self.project, self.cmd, self.cwd, self.env = project, cmd, cwd, env
+        # third wave: with --progress-json the runner's JSON lines drive the progress (they are kept in study.log and
+        # left out of the live log); without it the human lines are parsed (_STEP / _BUDGET)
+        self.prefix = progress_prefix or ""
+        self.plan: Optional[list] = None
         self.base = pathlib.Path(base)
         self.record, self.labels, self.expected = record, labels, max(1, int(expected))
         self.events: list[dict] = []
@@ -497,6 +631,28 @@ class StudyRun(threading.Thread):
             if len(self.events) > 6000:
                 del self.events[:1500]
             self.cv.notify_all()
+
+    def _step(self, name: str, resumed: bool):
+        if name in self.seen:
+            return
+        self.seen.append(name)
+        self.current_variant = name
+        self.emit({"type": "variant", "name": name, "label": self.labels.get(name, name), "resumed": resumed,
+                   **self.progress()})
+
+    def _json_event(self, ev: dict):
+        kind = ev.get("event")
+        if kind == "plan":
+            self.plan = list(ev.get("variants") or [])
+        elif kind in ("variant", "resumed") and ev.get("variant"):
+            self._step(str(ev["variant"]), kind == "resumed")
+        elif kind == "row":
+            self.emit({"type": "row", "name": ev.get("variant"), "label": self.labels.get(ev.get("variant") or "", ""),
+                       "kg_m2": ev.get("kg_m2"), "error": ev.get("error")})
+        elif kind == "budget":
+            self.budget_line = ("%s: time budget of %s min reached before '%s'; re-run with --resume to continue"
+                                % (ev.get("job"), ev.get("minutes"), ev.get("before")) if ev.get("before") else
+                                "%s: not started (time budget reached); re-run with --resume" % ev.get("job"))
 
     def progress(self) -> dict:
         return {"n": len(self.seen), "of": max(self.expected, len(self.seen)), "variant": self.current_variant,
@@ -522,15 +678,22 @@ class StudyRun(threading.Thread):
                     line = raw.rstrip("\r\n")
                     logf.write(line + "\n")
                     logf.flush()
+                    if self.prefix:
+                        if line.startswith(self.prefix):
+                            try:
+                                ev = json.loads(line[len(self.prefix):])
+                            except ValueError:
+                                ev = None
+                            if isinstance(ev, dict):
+                                self._json_event(ev)
+                            continue
+                        self.emit({"type": "log", "text": line})
+                        continue
                     # one --job per run, so every progress line is this job's (the sizer prints the spec's own
                     # 'job' field, which an engineer's spec need not keep equal to the folder name)
                     m = _STEP.match(line)
-                    if m and m.group("name") not in self.seen:
-                        name = m.group("name")
-                        self.seen.append(name)
-                        self.current_variant = name
-                        self.emit({"type": "variant", "name": name, "label": self.labels.get(name, name),
-                                   "resumed": bool(m.group("resumed")), **self.progress()})
+                    if m:
+                        self._step(m.group("name"), bool(m.group("resumed")))
                     if _BUDGET.match(line):
                         self.budget_line = line[3:]
                     self.emit({"type": "log", "text": line})
@@ -543,6 +706,8 @@ class StudyRun(threading.Thread):
         finally:
             self.record.update(status=status, rc=self.rc, finished_at=time.time(), variants_started=self.seen,
                                note=self.budget_line or None)
+            if self.plan is not None:
+                self.record["plan"] = self.plan
             try:
                 write_record(self.base, self.record)
             except OSError:
